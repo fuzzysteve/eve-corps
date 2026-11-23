@@ -301,3 +301,14 @@ def test_vetting_links_no_alliance_and_odd_names(client, advert):
     html = client.get(f"/corps/{CORP}").get_data(as_text=True)
     assert "zkillboard.com/alliance" not in html
     assert "https://evemaps.dotlan.net/corp/Caf%C3%A9_%26_Co%3F" in html
+
+
+
+def test_site_links_in_top_bar(client):
+    html = client.get("/").get_data(as_text=True)
+    strip = html.split('class="site-links"', 1)[1].split("</nav>", 1)[0]
+    for url in ("https://www.fuzzwork.co.uk/", "https://market.fuzzwork.co.uk/",
+                "https://evelexicon.com/", "https://evechievements.online/"):
+        assert f'href="{url}"' in strip
+    assert 'href="https://store.markeedragon.com/affiliate.php?id=250&amp;redirect=index.php?cat=4"' in strip
+    assert 'rel="sponsored noopener"' in strip

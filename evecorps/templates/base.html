@@ -24,11 +24,21 @@
 {% block extrahead %}{% endblock %}
 </head>
 <body class="d-flex flex-column min-vh-100">
-<nav class="navbar navbar-expand bg-body-tertiary">
+<nav class="site-links" aria-label="Other sites">
   <div class="container-xxl">
+    <a href="https://www.fuzzwork.co.uk/">Fuzzwork</a>
+    <a href="https://market.fuzzwork.co.uk/">Market</a>
+    <a href="https://evelexicon.com/">EVE Lexicon</a>
+    <a href="https://evechievements.online/">EVEchievements</a>
+    <a href="https://store.markeedragon.com/affiliate.php?id=250&amp;redirect=index.php?cat=4"
+       rel="sponsored noopener" title="Referral link">Markee Dragon</a>
+  </div>
+</nav>
+<nav class="navbar navbar-expand bg-body-tertiary">
+  <div class="container-xxl flex-wrap row-gap-2">
     <a class="navbar-brand" href="{{ url_for('main.index') }}">Eve-Corps.Online</a>
-    <a class="nav-link" href="{{ url_for('main.browse') }}">Find a Corp</a>
-    <div class="ms-auto d-flex align-items-center gap-2">
+    <a class="nav-link text-nowrap me-3" href="{{ url_for('main.browse') }}">Find a Corp</a>
+    <div class="ms-auto d-flex flex-wrap align-items-center gap-2">
     {% if g.character %}
       <img src="https://images.evetech.net/characters/{{ g.character.character_id }}/portrait?size=32" width="32" height="32" class="rounded" alt="">
       <span>{{ g.character.name }}{% if g.character.corporation %} [{{ g.character.corporation.ticker }}]{% endif %}</span>

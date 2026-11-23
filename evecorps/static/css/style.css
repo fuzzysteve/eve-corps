@@ -68,3 +68,25 @@ body {
 .diff-hunk {
   color: var(--bs-secondary-color);
 }
+
+/* Low-key strip of links to the other sites, above the main navbar. */
+.site-links {
+  background-color: var(--bs-body-bg);
+  border-bottom: 1px solid var(--bs-border-color-translucent);
+  font-size: 0.8rem;
+  line-height: 1.8;
+}
+.site-links .container-xxl {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 1rem;
+}
+.site-links a {
+  color: var(--bs-secondary-color);
+  text-decoration: none;
+}
+.site-links a:hover,
+.site-links a:focus-visible {
+  color: var(--bs-body-color);
+  text-decoration: underline;
+}
