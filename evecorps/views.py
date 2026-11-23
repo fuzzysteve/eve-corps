@@ -1,12 +1,14 @@
 import math
 from decimal import Decimal, InvalidOperation
 
-from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
+import requests
+from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 from sqlalchemy import select
 
 from . import choices
-from .auth import is_recruiter
+from .auth import is_recruiter, refresh_corporation
 from .extensions import db
+from .formatting import eve_description_to_markdown, render_markdown
 from .models import Advert, Corporation
 
 bp = Blueprint("main", __name__)
@@ -136,3 +138,25 @@ def edit_advert():
 
     flash("Advert saved." if advert.active else "Advert saved (hidden from search).", "success")
     return redirect(url_for("main.corp", corporation_id=corp.corporation_id))
+
+
+@bp.route("/advert/preview", methods=["POST"])
+def preview_advert():
+    if not is_recruiter(g.character):
+        abort(403)
+    body = request.form.get("body", "")[:BODY_MAX]
+    return render_markdown(body), 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@bp.route("/advert/ingame-description")
+def ingame_description():
+    """The corp's in-game description converted to Markdown, for the editor."""
+    if not is_recruiter(g.character):
+        abort(403)
+    try:
+        # Only re-fetched from ESI once the cached copy has expired.
+        corp = refresh_corporation(g.character.corporation_id)
+        db.session.commit()
+    except requests.RequestException:
+        return jsonify(error="Couldn't reach EVE to fetch your in-game description, try again shortly."), 502
+    return jsonify(markdown=eve_description_to_markdown(corp.description))

@@ -22,6 +22,8 @@ class Corporation(db.Model):
     alliance_id: Mapped[int | None] = mapped_column(BigInteger)
     member_count: Mapped[int | None] = mapped_column(Integer)
     ceo_id: Mapped[int | None] = mapped_column(BigInteger)
+    # Raw in-game description (EVE markup), offered as a starting point for adverts.
+    description: Mapped[str | None] = mapped_column(Text)
     # When ESI says the cached data may be refreshed; never fetch before this.
     esi_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(

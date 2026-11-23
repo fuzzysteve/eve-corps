@@ -193,3 +193,72 @@ def test_browse_filters(client, listings, query, expected):
 def test_hidden_advert_404_for_public(client, listings):
     assert client.get("/corps/3").status_code == 404
     assert client.get("/corps/1").status_code == 200
+
+
+def test_advert_body_rendered_as_markdown(client, eve):
+    csrf = login(client)
+    client.post("/advert", data=form(csrf, body="**Bold** https://discord.gg/abc\n\n![x](https://spy.example/p.png)"))
+    html = client.get(f"/corps/{CORP}").get_data(as_text=True)
+    assert "<strong>Bold</strong>" in html
+    assert 'href="https://discord.gg/abc" rel="nofollow noopener noreferrer ugc"' in html
+    assert '<img src="https://spy' not in html
+
+
+def test_preview_requires_recruiter_and_csrf(client, eve):
+    eve["roles"] = []
+    csrf = login(client)
+    assert client.post("/advert/preview", data={"csrf_token": csrf, "body": "x"}).status_code == 403
+
+
+def test_preview_renders_sanitized(client, eve):
+    csrf = login(client)
+    assert client.post("/advert/preview", data={"body": "**x**"}).status_code == 400
+    resp = client.post("/advert/preview", data={"csrf_token": csrf, "body": "**x** <script>alert(1)</script>"})
+    assert resp.status_code == 200
+    assert "<strong>x</strong>" in resp.get_data(as_text=True)
+    assert "<script" not in resp.get_data(as_text=True)
+
+
+def test_import_ingame_description(client, eve, monkeypatch):
+    csrf = login(client)
+    corp = db.session.get(Corporation, CORP)
+    corp.description = '<font size="12">Welcome <b>pilots</b></font><br><a href="showinfo:2//1">Our Corp</a>'
+    db.session.commit()
+    resp = client.get("/advert/ingame-description")
+    assert resp.status_code == 200
+    assert resp.get_json() == {"markdown": "Welcome **pilots**\nOur Corp"}
+
+
+def test_import_requires_recruiter(client, eve):
+    eve["roles"] = []
+    login(client)
+    assert client.get("/advert/ingame-description").status_code == 403
+
+
+def test_import_reports_esi_failure(client, eve, monkeypatch):
+    import requests as rq
+    login(client)
+    db.session.get(Corporation, CORP).esi_expires = datetime.now(timezone.utc) - timedelta(seconds=1)
+    db.session.commit()
+
+    def boom(cid):
+        raise rq.ConnectionError("down")
+
+    monkeypatch.setattr(esi, "get_corporation", boom)
+    resp = client.get("/advert/ingame-description")
+    assert resp.status_code == 502 and "error" in resp.get_json()
+
+
+def test_corp_description_stored_on_refresh(client, eve, monkeypatch):
+    monkeypatch.setattr(esi, "get_corporation", lambda cid: (
+        {"name": "Test Corp", "ticker": "TEST", "ceo_id": 1, "description": "<b>hi</b>"}, FUTURE))
+    login(client)
+    assert db.session.get(Corporation, CORP).description == "<b>hi</b>"
+
+
+def test_security_headers(client):
+    resp = client.get("/")
+    csp = resp.headers["Content-Security-Policy"]
+    assert "default-src 'self'" in csp and "object-src 'none'" in csp and "frame-ancestors 'none'" in csp
+    assert "script-src 'self' https://cdn.jsdelivr.net" in csp and "'unsafe-inline'" not in csp
+    assert resp.headers["X-Content-Type-Options"] == "nosniff"

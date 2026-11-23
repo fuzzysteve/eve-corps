@@ -16,9 +16,31 @@
       <input class="form-control" id="title" name="title" maxlength="120" required value="{{ val('title') }}">
     </div>
     <div class="mb-3">
-      <label class="form-label" for="body">Description</label>
-      <textarea class="form-control" id="body" name="body" rows="10" maxlength="10000" required>{{ val('body') }}</textarea>
-      <div class="form-text">Plain text. Line breaks are kept.</div>
+      <div class="d-flex justify-content-between align-items-end mb-1">
+        <label class="form-label mb-0" for="body">Description</label>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="import-ingame"
+                data-url="{{ url_for('main.ingame_description') }}">Import in-game description</button>
+      </div>
+      <ul class="nav nav-tabs" role="tablist">
+        <li class="nav-item"><button type="button" class="nav-link active" id="tab-write">Write</button></li>
+        <li class="nav-item"><button type="button" class="nav-link" id="tab-preview"
+                data-url="{{ url_for('main.preview_advert') }}">Preview</button></li>
+      </ul>
+      <textarea class="form-control rounded-top-0" id="body" name="body" rows="14" maxlength="10000" required>{{ val('body') }}</textarea>
+      <div class="advert-body form-control rounded-top-0 d-none" id="preview" aria-live="polite"></div>
+      <div class="form-text" id="import-status" aria-live="polite"></div>
+      <details class="form-text">
+        <summary>Formatting help</summary>
+        <table class="table table-sm mt-2 mb-0 small">
+          <tr><td><code>**bold**</code>, <code>*italic*</code>, <code>~~struck~~</code></td><td>Emphasis</td></tr>
+          <tr><td><code># Heading</code>, <code>## Smaller</code></td><td>Headings</td></tr>
+          <tr><td><code>- item</code> or <code>1. item</code></td><td>Lists</td></tr>
+          <tr><td><code>[Discord](https://discord.gg/...)</code> or a bare URL</td><td>Links</td></tr>
+          <tr><td><code>&gt; quote</code></td><td>Quote</td></tr>
+          <tr><td><code>| a | b |</code> rows</td><td>Tables</td></tr>
+        </table>
+        Images and HTML aren't allowed. Line breaks are kept as you type them.
+      </details>
     </div>
     {% for name, opts in choices.MULTI.items() %}
       {% set selected = (form.getlist(name) if form else (advert[name] if advert else [])) %}
@@ -43,3 +65,4 @@
   </form>
 </div>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/edit.js') }}" defer></script>{% endblock %}

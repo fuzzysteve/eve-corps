@@ -110,6 +110,7 @@ def refresh_corporation(corporation_id: int) -> Corporation:
     corp.alliance_id = data.get("alliance_id")
     corp.member_count = data.get("member_count")
     corp.ceo_id = data.get("ceo_id")
+    corp.description = data.get("description")
     corp.esi_expires = expires
     return corp
 

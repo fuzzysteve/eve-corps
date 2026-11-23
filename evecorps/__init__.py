@@ -25,7 +25,35 @@ def create_app(config: type[Config] | Config = Config) -> Flask:
     app.jinja_env.globals.update(csrf_token=csrf_token, is_recruiter=is_recruiter)
 
     from . import choices
+    from .formatting import render_markdown
 
     app.jinja_env.globals["choices"] = choices
+    app.jinja_env.filters["markdown"] = render_markdown
+    app.after_request(security_headers)
 
     return app
+
+
+# Defence in depth for user-written adverts: even if something got past the
+# Markdown renderer and sanitizer, the browser won't load or run it.
+CSP = "; ".join([
+    "default-src 'self'",
+    "script-src 'self' https://cdn.jsdelivr.net",
+    "style-src 'self' https://cdn.jsdelivr.net",
+    # data: is for Bootstrap's inline SVG icons (checkboxes, select arrows).
+    "img-src 'self' data: https://images.evetech.net https://web.ccpgamescdn.com",
+    "font-src 'self' https://cdn.jsdelivr.net",
+    "connect-src 'self'",
+    "object-src 'none'",
+    "frame-src 'none'",
+    "frame-ancestors 'none'",
+    "base-uri 'none'",
+    "form-action 'self'",
+])
+
+
+def security_headers(response):
+    response.headers.setdefault("Content-Security-Policy", CSP)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    return response
