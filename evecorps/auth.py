@@ -213,6 +213,14 @@ def csrf_token() -> str:
     return session["csrf"]
 
 
+def reject_nul_bytes() -> None:
+    """Postgres can't store NUL; reject it up front instead of failing with a 500."""
+    for values in (request.args.listvalues(), request.form.listvalues()):
+        for group in values:
+            if any("\x00" in v for v in group):
+                abort(400, "Invalid characters in request.")
+
+
 def check_csrf() -> None:
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
         sent = request.form.get("csrf_token", "")

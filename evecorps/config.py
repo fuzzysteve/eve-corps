@@ -25,6 +25,13 @@ class Config:
     # Unset, missing or empty file = report alerts are off.
     DISCORD_WEBHOOK_FILE = os.environ.get("DISCORD_WEBHOOK_FILE", "")
 
+    # Only answer for our own hostnames, so absolute URLs (link previews, redirects)
+    # can't be pointed at another domain via the Host header.
+    TRUSTED_HOSTS = [
+        h.strip() for h in os.environ.get("TRUSTED_HOSTS", "eve-corps.online,www.eve-corps.online").split(",")
+        if h.strip()
+    ]
+
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"

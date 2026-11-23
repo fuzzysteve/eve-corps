@@ -60,6 +60,9 @@ def render_markdown(source: str | None) -> Markup:
         url_schemes=ALLOWED_SCHEMES,
         link_rel=LINK_REL,
         strip_comments=True,
+        # Drop relative and protocol-relative hrefs ("/x", "//evil.example",
+        # "jav%09ascript:..."): adverts only need absolute http(s)/mailto links.
+        url_relative="deny",
     )
     return Markup(clean)
 

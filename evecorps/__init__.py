@@ -22,8 +22,11 @@ def create_app(config: type[Config] | Config = Config) -> Flask:
     app.register_blueprint(moderation_bp)
     app.jinja_env.globals["open_report_count"] = open_report_count
 
-    from .auth import check_csrf, csrf_token, is_moderator, is_recruiter, load_current_character
+    from .auth import (
+        check_csrf, csrf_token, is_moderator, is_recruiter, load_current_character, reject_nul_bytes,
+    )
 
+    app.before_request(reject_nul_bytes)
     app.before_request(check_csrf)
     app.before_request(load_current_character)
     app.jinja_env.globals.update(csrf_token=csrf_token, is_recruiter=is_recruiter, is_moderator=is_moderator)
@@ -39,15 +42,20 @@ def create_app(config: type[Config] | Config = Config) -> Flask:
     return app
 
 
+BOOTSTRAP_CSS = "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+BOOTSTRAP_JS = "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+
 # Defence in depth for user-written adverts: even if something got past the
 # Markdown renderer and sanitizer, the browser won't load or run it.
 CSP = "; ".join([
     "default-src 'self'",
-    "script-src 'self' https://cdn.jsdelivr.net",
-    "style-src 'self' https://cdn.jsdelivr.net",
+    # Exact files only: allowing all of cdn.jsdelivr.net would let an injected
+    # <script src> load any npm package from it.
+    "script-src 'self' " + BOOTSTRAP_JS,
+    "style-src 'self' " + BOOTSTRAP_CSS,
     # data: is for Bootstrap's inline SVG icons (checkboxes, select arrows).
     "img-src 'self' data: https://images.evetech.net https://web.ccpgamescdn.com",
-    "font-src 'self' https://cdn.jsdelivr.net",
+    "font-src 'self'",
     "connect-src 'self'",
     "object-src 'none'",
     "frame-src 'none'",

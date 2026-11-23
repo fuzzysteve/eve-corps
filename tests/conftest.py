@@ -13,6 +13,7 @@ class TestConfig(Config):
     SESSION_COOKIE_SECURE = False
     EVE_CLIENT_ID = "test-client"
     EVE_CALLBACK_URL = "http://localhost/sso/callback"
+    TRUSTED_HOSTS = None  # test client uses "localhost"
     # Never use the real admin-channel webhook from .env; tests that need one set their own.
     DISCORD_WEBHOOK_FILE = ""
     SQLALCHEMY_DATABASE_URI = os.environ.get(
@@ -41,6 +42,9 @@ def app():
         yield app
         db.session.remove()
         db.drop_all()
+        # Close this app's pool: one leaked pool per test exhausted the shared
+        # Postgres server's connection slots on a full run.
+        db.engine.dispose()
 
 
 @pytest.fixture
