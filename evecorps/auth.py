@@ -127,6 +127,15 @@ def refresh_corporation(corporation_id: int) -> Corporation:
     corp.alliance_id = data.get("alliance_id")
     corp.member_count = data.get("member_count")
     corp.ceo_id = data.get("ceo_id")
+    corp.war_eligible = data.get("war_eligible")
+    tax = (data.get("tax_rates") or {}).get("isk")
+    if tax is None and data.get("tax_rate") is not None:  # older compatibility dates: 0-1 fraction
+        tax = data["tax_rate"] * 100
+    corp.tax_rate = tax
+    founded = data.get("date_founded")
+    corp.date_founded = datetime.fromisoformat(founded) if founded else None
+    corp.enlisted_faction_id = data.get("enlisted_faction_id")
+    corp.state = data.get("state")
     corp.description = data.get("description")
     corp.esi_expires = expires
     _refresh_alliance_quietly(corp.alliance_id)

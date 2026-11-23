@@ -74,7 +74,17 @@
     <div class="mb-3">
       <div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="newbro" value="1" id="e-newbro" {% if newbro %}checked{% endif %}><label class="form-check-label" for="e-newbro">New-player friendly</label></div>
       <div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="srp" value="1" id="e-srp" {% if srp %}checked{% endif %}><label class="form-check-label" for="e-srp">Offers SRP</label></div>
+      {% set alpha = (form.get('alpha') if form else (advert.alpha_friendly if advert else false)) %}
+      <div class="form-check form-check-inline"><input class="form-check-input" type="checkbox" name="alpha" value="1" id="e-alpha" {% if alpha %}checked{% endif %}><label class="form-check-label" for="e-alpha">Alpha clones welcome</label></div>
     </div>
+    {% set commitment = (form.get('commitment', '') if form else (advert.commitment if advert and advert.commitment else '')) %}
+    <fieldset class="mb-3">
+      <legend class="fs-6 fw-semibold">Commitment</legend>
+      <div class="form-check"><input class="form-check-input" type="radio" name="commitment" value="" id="e-commit-none" {% if not commitment %}checked{% endif %}><label class="form-check-label" for="e-commit-none">Not stated</label></div>
+      {% for key, label in choices.COMMITMENT.items() %}
+        <div class="form-check"><input class="form-check-input" type="radio" name="commitment" value="{{ key }}" id="e-commit-{{ key }}" {% if commitment == key %}checked{% endif %}><label class="form-check-label" for="e-commit-{{ key }}">{{ label }}:<span class="text-body-secondary small"> {{ choices.COMMITMENT_HELP[key] }}</span></label></div>
+      {% endfor %}
+    </fieldset>
     <div class="mb-3">
       <label class="form-label" for="min_sp">Minimum skill points</label>
       <input class="form-control" id="min_sp" name="min_sp" placeholder="0 for none, or e.g. 5m" value="{{ form.get('min_sp', '') if form else (advert.min_sp if advert else '') }}">

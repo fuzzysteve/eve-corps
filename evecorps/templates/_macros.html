@@ -1,8 +1,12 @@
 {% macro badges(advert) %}
+  {% set tax = advert.corporation.tax_rate %}
+  {% if tax is not none and tax >= choices.HIGH_TAX %}<span class="badge text-bg-warning me-1" title="ISK tax of {{ '%g' | format(tax) }}% from EVE">High tax: {{ '%g' | format(tax) }}%</span>{% endif %}
   {% for name, opts in choices.MULTI.items() %}
     {% for key in advert[name] %}<span class="badge text-bg-secondary me-1">{{ opts[key] }}</span>{% endfor %}
   {% endfor %}
   {% if advert.newbro_friendly %}<span class="badge text-bg-success me-1">New-player friendly</span>{% endif %}
+  {% if advert.alpha_friendly %}<span class="badge text-bg-success me-1">Alpha clones welcome</span>{% endif %}
+  {% if advert.commitment %}<span class="badge text-bg-primary me-1" title="{{ choices.COMMITMENT_HELP[advert.commitment] }}">{{ choices.COMMITMENT[advert.commitment] }}</span>{% endif %}
   {% if advert.srp %}<span class="badge text-bg-info me-1">SRP</span>{% endif %}
   {% if advert.min_sp %}<span class="badge text-bg-warning me-1">{{ "{:,}".format(advert.min_sp) }}+ SP</span>{% endif %}
 {% endmacro %}
@@ -25,5 +29,17 @@
   {%- endfor -%}
   {%- if advert.newbro_friendly %}{% set _ = parts.append("New-player friendly") %}{% endif -%}
   {%- if advert.srp %}{% set _ = parts.append("SRP") %}{% endif -%}
+  {%- if advert.alpha_friendly %}{% set _ = parts.append("Alpha clones welcome") %}{% endif -%}
+  {%- if advert.commitment %}{% set _ = parts.append(choices.COMMITMENT[advert.commitment]) %}{% endif -%}
+  {{- parts | join(" · ") -}}
+{%- endmacro %}
+
+{% macro corp_facts(corp) -%}
+  {%- set parts = [] -%}
+  {#- High rates get a badge instead (see badges), so don't repeat them here. -#}
+  {%- if corp.tax_rate is not none and corp.tax_rate < choices.HIGH_TAX %}{% set _ = parts.append("%g%% tax" | format(corp.tax_rate)) %}{% endif -%}
+  {%- if corp.war_eligible is sameas false %}{% set _ = parts.append("can't be war-declared") %}{% elif corp.war_eligible %}{% set _ = parts.append("war-declarable") %}{% endif -%}
+  {%- if corp.date_founded %}{% set _ = parts.append(corp.date_founded | age ~ " old") %}{% endif -%}
+  {%- if corp.enlisted_faction_id in choices.FW_FACTIONS %}{% set _ = parts.append("FW: " ~ choices.FW_FACTIONS[corp.enlisted_faction_id]) %}{% endif -%}
   {{- parts | join(" · ") -}}
 {%- endmacro %}

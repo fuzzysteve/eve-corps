@@ -37,9 +37,26 @@ def create_app(config: type[Config] | Config = Config) -> Flask:
     app.jinja_env.globals["choices"] = choices
     app.jinja_env.filters["markdown"] = render_markdown
     app.jinja_env.filters["excerpt"] = plain_text
+    app.jinja_env.filters["age"] = corp_age
     app.after_request(security_headers)
 
     return app
+
+
+def corp_age(founded) -> str:
+    """'3 years', '8 months', 'under a month' since a founding date."""
+    from datetime import datetime, timezone
+
+    if founded is None:
+        return ""
+    days = (datetime.now(timezone.utc) - founded).days
+    if days >= 365:
+        years = days // 365
+        return f"{years} year{'s' if years != 1 else ''}"
+    months = days // 30
+    if months >= 1:
+        return f"{months} month{'s' if months != 1 else ''}"
+    return "under a month"
 
 
 BOOTSTRAP_CSS = "https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"

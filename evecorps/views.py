@@ -1,7 +1,7 @@
 import difflib
 import math
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlsplit
 
@@ -168,10 +168,57 @@ def browse():
     if my_sp:
         stmt = stmt.where(Advert.min_sp <= my_sp)
 
+    # Closed corporations never show in search.
+    stmt = stmt.where(or_(Corporation.state.is_(None), Corporation.state != "closed"))
+
+    # Verified corp facts from ESI.
+    corp_filters = {}
+    if request.args.get("no_war"):
+        stmt = stmt.where(Corporation.war_eligible.is_(False))
+        corp_filters["no_war"] = True
+    max_tax = request.args.get("max_tax", type=int)
+    if max_tax in choices.MAX_TAX:
+        stmt = stmt.where(Corporation.tax_rate <= max_tax)
+        corp_filters["max_tax"] = max_tax
+    sizes = [s for s in dict.fromkeys(request.args.getlist("size")) if s in choices.SIZES]
+    if sizes:
+        ranges = []
+        for key in sizes:
+            _, low, high = choices.SIZES[key]
+            cond = Corporation.member_count >= low
+            if high is not None:
+                cond = cond & (Corporation.member_count <= high)
+            ranges.append(cond)
+        stmt = stmt.where(or_(*ranges))
+    corp_filters["sizes"] = sizes
+    fw = request.args.get("fw", "")
+    if fw == "none":
+        stmt = stmt.where(Corporation.enlisted_faction_id.is_(None))
+    elif fw.isdigit() and int(fw) in choices.FW_FACTIONS:
+        stmt = stmt.where(Corporation.enlisted_faction_id == int(fw))
+    else:
+        fw = ""
+    corp_filters["fw"] = fw
+    min_age = request.args.get("min_age", "")
+    if min_age in choices.MIN_AGE:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=choices.MIN_AGE[min_age][1])
+        stmt = stmt.where(Corporation.date_founded <= cutoff)
+    else:
+        min_age = ""
+    corp_filters["min_age"] = min_age
+
+    # Recruiter-set extras.
+    if request.args.get("alpha"):
+        stmt = stmt.where(Advert.alpha_friendly.is_(True))
+    commitment = [c for c in dict.fromkeys(request.args.getlist("commitment")) if c in choices.COMMITMENT]
+    if commitment:
+        stmt = stmt.where(Advert.commitment.in_(commitment))
+    corp_filters["commitment"] = commitment
+
     page = max(request.args.get("page", 1, type=int), 1)
     adverts = db.paginate(stmt, page=page, per_page=PER_PAGE, error_out=False)
     return render_template("browse.html", adverts=adverts, filters=filters, alliance=alliance,
-                           q=q, sort=sort, sorts=SORTS)
+                           q=q, sort=sort, sorts=SORTS, cf=corp_filters)
 
 
 @bp.route("/corps/<int:corporation_id>")
@@ -204,6 +251,8 @@ def _display(field: str, value) -> str:
         return "yes" if value else "no"
     if field == "min_sp":
         return f"{value:,}"
+    if field == "commitment":
+        return choices.COMMITMENT.get(value, value)
     if isinstance(value, list):
         return ", ".join(value)
     return str(value)
@@ -279,6 +328,7 @@ def report(corporation_id: int):
 REVISION_FIELDS = {
     "title": "Title", "body": "Description", "timezones": "Timezones", "languages": "Languages",
     "activities": "Activities", "space": "Space", "newbro_friendly": "New-player friendly",
+    "alpha_friendly": "Alpha clones welcome", "commitment": "Commitment",
     "srp": "SRP", "min_sp": "Minimum SP", "discord_url": "Discord", "website_url": "Website",
     "ingame_channel": "In-game channel", "contacts": "Contacts", "active": "Shown in search",
 }
@@ -370,6 +420,9 @@ def edit_advert():
     for name in choices.MULTI:
         setattr(advert, name, _selected(form, name))
     advert.newbro_friendly = bool(form.get("newbro"))
+    advert.alpha_friendly = bool(form.get("alpha"))
+    commitment = form.get("commitment", "")
+    advert.commitment = commitment if commitment in choices.COMMITMENT else None
     advert.srp = bool(form.get("srp"))
     advert.min_sp = min_sp
     advert.discord_url = discord_url

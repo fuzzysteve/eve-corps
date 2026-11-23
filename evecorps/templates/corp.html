@@ -60,6 +60,18 @@
   </article>
 
   <aside class="col-lg-4 d-flex flex-column gap-4">
+    <section class="card card-body">
+      <h2 class="h5">At a glance</h2>
+      <dl class="row mb-0 small">
+        {% if corp.member_count is not none %}<dt class="col-6">Members</dt><dd class="col-6">{{ corp.member_count }}</dd>{% endif %}
+        {% if corp.tax_rate is not none %}<dt class="col-6">Corp tax</dt><dd class="col-6">{% if corp.tax_rate >= choices.HIGH_TAX %}<span class="badge text-bg-warning">{{ "%g" | format(corp.tax_rate) }}%</span>{% else %}{{ "%g" | format(corp.tax_rate) }}%{% endif %}</dd>{% endif %}
+        {% if corp.war_eligible is not none %}<dt class="col-6">War declarations</dt><dd class="col-6">{{ "Can be war-declared" if corp.war_eligible else "Can't be war-declared" }}</dd>{% endif %}
+        {% if corp.date_founded %}<dt class="col-6">Founded</dt><dd class="col-6">{{ corp.date_founded.strftime('%Y-%m-%d') }} ({{ corp.date_founded | age }})</dd>{% endif %}
+        {% if corp.enlisted_faction_id in choices.FW_FACTIONS %}<dt class="col-6">Faction warfare</dt><dd class="col-6">{{ choices.FW_FACTIONS[corp.enlisted_faction_id] }}</dd>{% endif %}
+        {% if advert.commitment %}<dt class="col-6">Commitment</dt><dd class="col-6">{{ choices.COMMITMENT[advert.commitment] }} <span class="d-block text-body-secondary">{{ choices.COMMITMENT_HELP[advert.commitment] }}</span></dd>{% endif %}
+      </dl>
+      {% if corp.state == 'closed' %}<div class="alert alert-danger small mt-2 mb-0">This corporation has closed.</div>{% endif %}
+    </section>
     {% if advert.discord_url or advert.website_url or advert.ingame_channel or advert.contacts %}
     <section class="card card-body">
       <h2 class="h5">Get in touch</h2>

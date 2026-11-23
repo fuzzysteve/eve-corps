@@ -2,8 +2,8 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    BigInteger, Boolean, Computed, DateTime, ForeignKey, Index, Integer, String, Text, Uuid, false,
-    func, text, true,
+    BigInteger, Boolean, Computed, DateTime, Float, ForeignKey, Index, Integer, String, Text, Uuid,
+    false, func, text, true,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, foreign, mapped_column, relationship
@@ -38,6 +38,12 @@ class Corporation(db.Model):
     alliance_id: Mapped[int | None] = mapped_column(BigInteger)
     member_count: Mapped[int | None] = mapped_column(Integer)
     ceo_id: Mapped[int | None] = mapped_column(BigInteger)
+    # From ESI; used as verified filters.
+    war_eligible: Mapped[bool | None] = mapped_column(Boolean)
+    tax_rate: Mapped[float | None] = mapped_column(Float)  # ISK tax, percent 0-100
+    date_founded: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    enlisted_faction_id: Mapped[int | None] = mapped_column(Integer)
+    state: Mapped[str | None] = mapped_column(String(10))  # "active" / "closed"
     # Raw in-game description (EVE markup), offered as a starting point for adverts.
     description: Mapped[str | None] = mapped_column(Text)
     # When ESI says the cached data may be refreshed; never fetch before this.
@@ -104,6 +110,8 @@ class Advert(db.Model):
     space: Mapped[list[str]] = mapped_column(ARRAY(String(20)), default=list)
 
     newbro_friendly: Mapped[bool] = mapped_column(Boolean, default=False)
+    alpha_friendly: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    commitment: Mapped[str | None] = mapped_column(String(10))  # key of choices.COMMITMENT
     srp: Mapped[bool] = mapped_column(Boolean, default=False)
     # Minimum skill points required; whole SP, 0 = no requirement.
     min_sp: Mapped[int] = mapped_column(BigInteger, default=0)

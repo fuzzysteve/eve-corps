@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import badges, checkboxes, field_labels %}
+{% from "_macros.html" import badges, checkboxes, corp_facts, field_labels %}
 {% block title %}Find a Corp - Eve-Corps.Online{% endblock %}
 {% block maincontent %}
 <div class="row g-4">
@@ -15,6 +15,37 @@
         <legend class="fs-6 fw-semibold">Other</legend>
         <div class="form-check"><input class="form-check-input" type="checkbox" name="newbro" value="1" id="f-newbro" {% if request.args.newbro %}checked{% endif %}><label class="form-check-label" for="f-newbro">New-player friendly</label></div>
         <div class="form-check"><input class="form-check-input" type="checkbox" name="srp" value="1" id="f-srp" {% if request.args.srp %}checked{% endif %}><label class="form-check-label" for="f-srp">Offers SRP</label></div>
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="alpha" value="1" id="f-alpha" {% if request.args.alpha %}checked{% endif %}><label class="form-check-label" for="f-alpha">Alpha clones welcome</label></div>
+      </fieldset>
+      <fieldset class="mb-3">
+        <legend class="fs-6 fw-semibold">Commitment</legend>
+        {% for key, label in choices.COMMITMENT.items() %}
+          <div class="form-check"><input class="form-check-input" type="checkbox" name="commitment" value="{{ key }}" id="f-commit-{{ key }}" {% if key in cf.commitment %}checked{% endif %}><label class="form-check-label" for="f-commit-{{ key }}" title="{{ choices.COMMITMENT_HELP[key] }}">{{ label }}</label></div>
+        {% endfor %}
+      </fieldset>
+      <fieldset class="mb-3">
+        <legend class="fs-6 fw-semibold">Corporation <span class="fw-normal small text-body-secondary">(from EVE)</span></legend>
+        <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="no_war" value="1" id="f-nowar" {% if cf.no_war %}checked{% endif %}><label class="form-check-label" for="f-nowar">Can't be war-declared</label></div>
+        <label class="form-label small mb-1" for="f-tax">Maximum tax</label>
+        <select class="form-select form-select-sm mb-2" name="max_tax" id="f-tax">
+          <option value="">Any</option>
+          {% for t in choices.MAX_TAX %}<option value="{{ t }}" {% if cf.max_tax == t %}selected{% endif %}>{{ t }}%{% if t == 0 %} (no tax){% endif %}</option>{% endfor %}
+        </select>
+        <div class="small mb-1">Members</div>
+        {% for key, (label, lo, hi) in choices.SIZES.items() %}
+          <div class="form-check"><input class="form-check-input" type="checkbox" name="size" value="{{ key }}" id="f-size-{{ key }}" {% if key in cf.sizes %}checked{% endif %}><label class="form-check-label" for="f-size-{{ key }}">{{ label }}</label></div>
+        {% endfor %}
+        <label class="form-label small mb-1 mt-2" for="f-fw">Faction warfare</label>
+        <select class="form-select form-select-sm mb-2" name="fw" id="f-fw">
+          <option value="">Any</option>
+          <option value="none" {% if cf.fw == 'none' %}selected{% endif %}>Not in faction warfare</option>
+          {% for fid, name in choices.FW_FACTIONS.items() %}<option value="{{ fid }}" {% if cf.fw == fid | string %}selected{% endif %}>{{ name }}</option>{% endfor %}
+        </select>
+        <label class="form-label small mb-1" for="f-age">Corporation age</label>
+        <select class="form-select form-select-sm" name="min_age" id="f-age">
+          <option value="">Any</option>
+          {% for key, (label, days) in choices.MIN_AGE.items() %}<option value="{{ key }}" {% if cf.min_age == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
       </fieldset>
       <div class="mb-3">
         <label class="form-label fw-semibold" for="f-alliance">Alliance</label>
@@ -59,6 +90,8 @@
           <div>
             <h2 class="h5 mb-1"><a href="{{ url_for('main.corp', corporation_id=advert.corporation_id) }}">{{ advert.title }}</a></h2>
             <div class="text-body-secondary small mb-2">{{ advert.corporation.name }} [{{ advert.corporation.ticker }}]{% if advert.corporation.member_count %} · {{ advert.corporation.member_count }} members{% endif %} · updated {{ advert.last_confirmed_at.strftime('%Y-%m-%d') }}</div>
+            {% set facts = corp_facts(advert.corporation) | trim %}
+            {% if facts %}<div class="small text-body-secondary mb-2">{{ facts }}</div>{% endif %}
             {% set alliance = advert.corporation.alliance %}
             {% if alliance %}
             <div class="small mb-2 d-flex align-items-center gap-1">
