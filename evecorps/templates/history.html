@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% set corp = advert.corporation %}
+{% block title %}Edit history: {{ corp.name }} - Eve-Corps.Online{% endblock %}
+{% block maincontent %}
+<div class="card card-body">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+    <h1 class="h4 mb-0">Edit history: {{ corp.name }} [{{ corp.ticker }}]</h1>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.corp', corporation_id=corp.corporation_id) }}">Back to advert</a>
+  </div>
+  {% if not entries %}
+    <p class="text-body-secondary mb-0">No recorded changes yet. Changes are recorded from now on.</p>
+  {% endif %}
+  <ol class="list-unstyled mb-0">
+  {% for e in entries %}
+    <li class="history-entry">
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <img src="https://images.evetech.net/characters/{{ e.who.character_id }}/portrait?size=32" width="24" height="24" class="rounded" alt="">
+        <strong>{{ e.who.name }}</strong>
+        <span class="text-body-secondary small">{{ e.at.strftime('%Y-%m-%d %H:%M') }} UTC</span>
+        {% if e.kind == 'moderation' %}<span class="badge text-bg-warning">Moderator</span>{% endif %}
+      </div>
+      {% if e.kind == 'moderation' %}
+        <p class="mb-0">{{ {'hide': 'Hid the advert', 'unhide': 'Unhid the advert', 'dismiss': 'Dismissed reports'}[e.action] }}{% if e.reason %}: {{ e.reason }}{% endif %}</p>
+      {% elif e.created %}
+        <p class="mb-0">Created the advert.</p>
+      {% else %}
+        {% for c in e.changes %}
+          {% if c.diff is defined %}
+            <details class="mb-1">
+              <summary>Changed {{ c.label | lower }}</summary>
+              <pre class="diff mt-1 mb-0">{% for kind, line in c.diff %}<span class="diff-{{ kind }}">{{ line }}</span>
+{% endfor %}</pre>
+            </details>
+          {% else %}
+            <div class="mb-1">{{ c.label }}: <span class="text-body-secondary text-decoration-line-through">{{ c.old }}</span> → {{ c.new }}</div>
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+    </li>
+  {% endfor %}
+  </ol>
+</div>
+{% endblock %}

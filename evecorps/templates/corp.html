@@ -35,6 +35,12 @@
           <div>
             <h1 class="h3">{{ advert.title }}</h1>
             <div class="text-body-secondary mb-2">{{ corp.name }} [{{ corp.ticker }}]{% if corp.member_count %} · {{ corp.member_count }} members{% endif %}</div>
+            {% if corp.alliance %}
+            <div class="mb-2 d-flex align-items-center gap-2">
+              <img src="https://images.evetech.net/alliances/{{ corp.alliance_id }}/logo?size=32" width="32" height="32" alt="">
+              <span>{{ corp.alliance.name }} &lt;{{ corp.alliance.ticker }}&gt;</span>
+            </div>
+            {% endif %}
             {{ badges(advert) }}
           </div>
         </div>
@@ -43,7 +49,12 @@
            title="Updated whenever one of the corporation's recruiters edits the advert or logs in to this site.">
           Last updated {{ advert.last_confirmed_at.strftime('%Y-%m-%d') }}
         </p>
-        {% if can_edit %}<a class="btn btn-primary mt-3" href="{{ url_for('main.edit_advert') }}">Edit advert</a>{% endif %}
+        {% if can_edit or moderator %}
+        <div class="d-flex gap-2 mt-3">
+          {% if can_edit %}<a class="btn btn-primary" href="{{ url_for('main.edit_advert') }}">Edit advert</a>{% endif %}
+          <a class="btn btn-outline-secondary" href="{{ url_for('main.history', corporation_id=corp.corporation_id) }}">Edit history</a>
+        </div>
+        {% endif %}
       </div>
     </div>
   </article>
@@ -78,9 +89,10 @@
         <li><a href="https://evewho.com/corporation/{{ corp.corporation_id }}" rel="noopener noreferrer">EveWho</a> <span class="text-body-secondary small">members and history</span></li>
         <li><a href="https://evemaps.dotlan.net/corp/{{ corp.name | replace(' ', '_') | urlencode }}" rel="noopener noreferrer">DOTLAN</a> <span class="text-body-secondary small">alliance and sovereignty</span></li>
         {% if corp.alliance_id %}
-        <li class="mt-2">Their alliance:
+        <li class="mt-2">{% if corp.alliance %}{{ corp.alliance.name }}{% else %}Their alliance{% endif %}:
           <a href="https://zkillboard.com/alliance/{{ corp.alliance_id }}/" rel="noopener noreferrer">zKillboard</a> ·
-          <a href="https://evewho.com/alliance/{{ corp.alliance_id }}" rel="noopener noreferrer">EveWho</a>
+          <a href="https://evewho.com/alliance/{{ corp.alliance_id }}" rel="noopener noreferrer">EveWho</a>{% if corp.alliance %} ·
+          <a href="https://evemaps.dotlan.net/alliance/{{ corp.alliance.name | replace(' ', '_') | urlencode }}" rel="noopener noreferrer">DOTLAN</a>{% endif %}
         </li>
         {% endif %}
       </ul>

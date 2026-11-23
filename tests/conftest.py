@@ -13,9 +13,24 @@ class TestConfig(Config):
     SESSION_COOKIE_SECURE = False
     EVE_CLIENT_ID = "test-client"
     EVE_CALLBACK_URL = "http://localhost/sso/callback"
+    # Never use the real admin-channel webhook from .env; tests that need one set their own.
+    DISCORD_WEBHOOK_FILE = ""
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "TEST_DATABASE_URL", (Config.SQLALCHEMY_DATABASE_URI or "").rsplit("/", 1)[0] + "/evecorps_test"
     )
+
+
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch):
+    """Fail loudly if a test tries to reach ESI, SSO or Discord for real."""
+    import requests
+
+    def blocked(self, request, **kwargs):
+        from urllib.parse import urlsplit
+        host = urlsplit(request.url).netloc  # host only: full URLs can carry secrets (webhook tokens)
+        raise AssertionError(f"test tried to reach the network: {request.method} {host}")
+
+    monkeypatch.setattr(requests.sessions.Session, "send", blocked)
 
 
 @pytest.fixture

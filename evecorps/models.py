@@ -2,13 +2,28 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, Uuid, false, func,
-    text, true,
+    BigInteger, Boolean, Computed, DateTime, ForeignKey, Index, Integer, String, Text, Uuid, false,
+    func, text, true,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
+from sqlalchemy.orm import Mapped, foreign, mapped_column, relationship
+
 
 from .extensions import db
+
+
+class Alliance(db.Model):
+    """Public alliance info, cached from ESI /alliances/{id}."""
+
+    __tablename__ = "alliance"
+
+    alliance_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    name: Mapped[str] = mapped_column(String(100))
+    ticker: Mapped[str] = mapped_column(String(10))
+    esi_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class Corporation(db.Model):
@@ -32,6 +47,11 @@ class Corporation(db.Model):
     )
 
     characters: Mapped[list["Character"]] = relationship(back_populates="corporation")
+    # No DB foreign key: corp rows can arrive before their alliance row is fetched.
+    alliance: Mapped[Alliance | None] = relationship(
+        primaryjoin=lambda: foreign(Corporation.alliance_id) == Alliance.alliance_id,
+        viewonly=True, lazy="joined",
+    )
     advert: Mapped["Advert | None"] = relationship(back_populates="corporation")
 
 
@@ -68,6 +88,7 @@ class Advert(db.Model):
         Index("ix_advert_languages", "languages", postgresql_using="gin"),
         Index("ix_advert_activities", "activities", postgresql_using="gin"),
         Index("ix_advert_space", "space", postgresql_using="gin"),
+        Index("ix_advert_search", "search_vector", postgresql_using="gin"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -116,7 +137,17 @@ class Advert(db.Model):
     corporation: Mapped[Corporation] = relationship(back_populates="advert")
     updated_by: Mapped[Character | None] = relationship()
 
+    # Full-text index over title and body, maintained by Postgres.
+    search_vector: Mapped[str] = mapped_column(
+        TSVECTOR,
+        Computed("to_tsvector('english', coalesce(title, '') || ' ' || coalesce(body, ''))", persisted=True),
+        deferred=True,
+    )
+
     reports: Mapped[list["Report"]] = relationship(back_populates="advert", cascade="all, delete-orphan")
+    revisions: Mapped[list["AdvertRevision"]] = relationship(
+        back_populates="advert", cascade="all, delete-orphan", order_by="AdvertRevision.created_at"
+    )
 
     @property
     def public(self) -> bool:
@@ -159,3 +190,19 @@ class ModerationLog(db.Model):
 
     advert: Mapped[Advert] = relationship()
     moderator: Mapped[Character] = relationship()
+
+
+class AdvertRevision(db.Model):
+    """A saved version of an advert: full snapshot plus which fields changed."""
+
+    __tablename__ = "advert_revision"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    advert_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("advert.id", ondelete="CASCADE"), index=True)
+    editor_id: Mapped[int] = mapped_column(ForeignKey("character.character_id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    changed: Mapped[list[str]] = mapped_column(ARRAY(String(30)), default=list)
+    snapshot: Mapped[dict] = mapped_column(JSONB)
+
+    advert: Mapped[Advert] = relationship(back_populates="revisions")
+    editor: Mapped[Character] = relationship()

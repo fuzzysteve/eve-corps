@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from . import esi, sso
 from .extensions import db
-from .models import Advert, Character, Corporation
+from .models import Advert, Alliance, Character, Corporation
 
 bp = Blueprint("auth", __name__)
 
@@ -115,6 +115,7 @@ def refresh_corporation(corporation_id: int) -> Corporation:
     corp = db.session.get(Corporation, corporation_id)
     now = datetime.now(timezone.utc)
     if corp is not None and corp.esi_expires and corp.esi_expires > now:
+        _refresh_alliance_quietly(corp.alliance_id)
         return corp
 
     data, expires = esi.get_corporation(corporation_id)
@@ -128,7 +129,33 @@ def refresh_corporation(corporation_id: int) -> Corporation:
     corp.ceo_id = data.get("ceo_id")
     corp.description = data.get("description")
     corp.esi_expires = expires
+    _refresh_alliance_quietly(corp.alliance_id)
     return corp
+
+
+def refresh_alliance(alliance_id: int) -> Alliance:
+    """Return the alliance row, re-fetching from ESI only once its cache has expired."""
+    alliance = db.session.get(Alliance, alliance_id)
+    if alliance is not None and alliance.esi_expires and alliance.esi_expires > datetime.now(timezone.utc):
+        return alliance
+    data, expires = esi.get_alliance(alliance_id)
+    if alliance is None:
+        alliance = Alliance(alliance_id=alliance_id)
+        db.session.add(alliance)
+    alliance.name = data["name"]
+    alliance.ticker = data["ticker"]
+    alliance.esi_expires = expires
+    return alliance
+
+
+def _refresh_alliance_quietly(alliance_id: int | None) -> None:
+    """Alliance names are nice to have; never let a lookup failure break the caller."""
+    if alliance_id is None:
+        return
+    try:
+        refresh_alliance(alliance_id)
+    except requests.RequestException:
+        current_app.logger.warning("ESI alliance lookup failed for %s", alliance_id, exc_info=True)
 
 
 def check_recruiter(character: Character, access_token: str, claims: dict) -> None:

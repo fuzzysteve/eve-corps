@@ -49,6 +49,13 @@ def get_corporation(corporation_id: int) -> tuple[dict, datetime | None]:
     return resp.json(), _expires(resp)
 
 
+def get_alliance(alliance_id: int) -> tuple[dict, datetime | None]:
+    """Public alliance info plus the time ESI says it may next be refreshed."""
+    resp = _session().get(f"{ESI_BASE}/alliances/{alliance_id}", timeout=TIMEOUT)
+    resp.raise_for_status()
+    return resp.json(), _expires(resp)
+
+
 RECRUITER_ROLES = {"Director", "Personnel_Manager"}
 
 

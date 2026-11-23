@@ -45,3 +45,26 @@ body {
 #preview {
   min-height: 14rem;
 }
+
+.history-entry {
+  border-left: 3px solid var(--bs-border-color);
+  padding: 0.25rem 0 0.75rem 1rem;
+}
+.diff {
+  background-color: var(--bs-tertiary-bg);
+  padding: 0.5rem;
+  border-radius: var(--bs-border-radius);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.diff-add {
+  color: var(--bs-success-text-emphasis);
+  background-color: var(--bs-success-bg-subtle);
+}
+.diff-del {
+  color: var(--bs-danger-text-emphasis);
+  background-color: var(--bs-danger-bg-subtle);
+}
+.diff-hunk {
+  color: var(--bs-secondary-color);
+}

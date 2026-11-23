@@ -1,3 +1,4 @@
+import difflib
 import math
 import re
 from datetime import datetime, timezone
@@ -9,14 +10,14 @@ from flask import (
     Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template, request,
     send_from_directory, url_for,
 )
-from sqlalchemy import select, update
+from sqlalchemy import func, or_, select, update
 
 from . import choices, esi
 from .auth import is_moderator, is_recruiter, refresh_corporation
 from .extensions import db
 from .formatting import eve_description_to_markdown, render_markdown
 from .notify import post_report_alert
-from .models import Advert, Corporation, Report
+from .models import Advert, AdvertRevision, Alliance, Corporation, ModerationLog, Report
 
 bp = Blueprint("main", __name__)
 
@@ -98,14 +99,54 @@ def _contact_names(raw: str) -> list[str]:
     return list(dict.fromkeys(names))
 
 
+SORTS = {
+    "updated": "Recently updated",
+    "members": "Most members",
+    "newest": "Newest adverts",
+}
+Q_MAX = 200
+
+
+def _like(term: str) -> str:
+    """ILIKE pattern matching term anywhere, with % and _ taken literally."""
+    return "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
 @bp.route("/corps")
 def browse():
     stmt = (
         select(Advert)
         .join(Advert.corporation)
+        .outerjoin(Alliance, Alliance.alliance_id == Corporation.alliance_id)
         .where(Advert.active.is_(True), Advert.moderation_hidden.is_(False))
-        .order_by(Advert.last_confirmed_at.desc())
     )
+
+    q = request.args.get("q", "").strip()[:Q_MAX]
+    rank = None
+    if q:
+        tsq = func.websearch_to_tsquery("english", q)
+        pattern = _like(q)
+        stmt = stmt.where(or_(
+            Advert.search_vector.op("@@")(tsq),
+            Corporation.name.ilike(pattern, escape="\\"),
+            Corporation.ticker.ilike(pattern, escape="\\"),
+            Alliance.name.ilike(pattern, escape="\\"),
+            Alliance.ticker.ilike(pattern, escape="\\"),
+        ))
+        rank = func.ts_rank(Advert.search_vector, tsq)
+
+    sort = request.args.get("sort", "")
+    if sort not in SORTS:
+        sort = "relevance" if q else "updated"
+    if sort == "relevance" and rank is not None:
+        stmt = stmt.order_by(rank.desc(), Advert.last_confirmed_at.desc())
+    elif sort == "members":
+        stmt = stmt.order_by(Corporation.member_count.desc().nulls_last(), Advert.last_confirmed_at.desc())
+    elif sort == "newest":
+        stmt = stmt.order_by(Advert.created_at.desc())
+    else:
+        sort = "updated"
+        stmt = stmt.order_by(Advert.last_confirmed_at.desc())
     filters = {name: _selected(request.args, name) for name in choices.MULTI}
     for name, values in filters.items():
         if values:
@@ -129,7 +170,8 @@ def browse():
 
     page = max(request.args.get("page", 1, type=int), 1)
     adverts = db.paginate(stmt, page=page, per_page=PER_PAGE, error_out=False)
-    return render_template("browse.html", adverts=adverts, filters=filters, alliance=alliance)
+    return render_template("browse.html", adverts=adverts, filters=filters, alliance=alliance,
+                           q=q, sort=sort, sorts=SORTS)
 
 
 @bp.route("/corps/<int:corporation_id>")
@@ -150,6 +192,63 @@ def corp(corporation_id: int):
         "corp.html", advert=advert, can_edit=can_edit, moderator=moderator,
         already_reported=already_reported,
     )
+
+
+def _display(field: str, value) -> str:
+    if value is None or value == [] or value == "":
+        return "(none)"
+    if field in choices.MULTI:
+        labels = choices.MULTI[field]
+        return ", ".join(labels.get(v, v) for v in value)
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if field == "min_sp":
+        return f"{value:,}"
+    if isinstance(value, list):
+        return ", ".join(value)
+    return str(value)
+
+
+def _text_diff(old: str | None, new: str | None) -> list[tuple[str, str]]:
+    """Unified diff lines tagged add/del/ctx, without the file headers."""
+    lines = difflib.unified_diff((old or "").splitlines(), (new or "").splitlines(), lineterm="", n=1)
+    out = []
+    for line in list(lines)[2:]:
+        kind = {"+": "add", "-": "del", "@": "hunk"}.get(line[:1], "ctx")
+        out.append((kind, line))
+    return out
+
+
+@bp.route("/corps/<int:corporation_id>/history")
+def history(corporation_id: int):
+    advert = db.session.scalar(select(Advert).where(Advert.corporation_id == corporation_id))
+    if advert is None:
+        abort(404)
+    can_edit = is_recruiter(g.character) and g.character.recruiter_corp_id == corporation_id
+    if not (can_edit or is_moderator(g.character)):
+        abort(403)
+
+    entries = []
+    previous = None
+    for rev in advert.revisions:
+        changes = []
+        for field in rev.changed:
+            if field == "created" or previous is None:
+                continue
+            old, new = previous.snapshot.get(field), rev.snapshot.get(field)
+            if field in ("title", "body"):
+                changes.append({"label": REVISION_FIELDS[field], "diff": _text_diff(old, new)})
+            else:
+                changes.append({"label": REVISION_FIELDS[field],
+                                "old": _display(field, old), "new": _display(field, new)})
+        entries.append({"kind": "revision", "at": rev.created_at, "who": rev.editor,
+                        "created": "created" in rev.changed, "changes": changes, "rev": rev})
+        previous = rev
+    for log in db.session.scalars(select(ModerationLog).where(ModerationLog.advert_id == advert.id)):
+        entries.append({"kind": "moderation", "at": log.created_at, "who": log.moderator,
+                        "action": log.action, "reason": log.reason})
+    entries.sort(key=lambda e: e["at"], reverse=True)
+    return render_template("history.html", advert=advert, entries=entries, labels=REVISION_FIELDS)
 
 
 @bp.route("/corps/<int:corporation_id>/report", methods=["POST"])
@@ -174,6 +273,21 @@ def report(corporation_id: int):
         _alert_once(advert, new_report)
     flash("Thanks, the moderators will take a look.", "success")
     return redirect(url_for("main.corp", corporation_id=corporation_id))
+
+
+# Fields recorded in each revision, in display order.
+REVISION_FIELDS = {
+    "title": "Title", "body": "Description", "timezones": "Timezones", "languages": "Languages",
+    "activities": "Activities", "space": "Space", "newbro_friendly": "New-player friendly",
+    "srp": "SRP", "min_sp": "Minimum SP", "discord_url": "Discord", "website_url": "Website",
+    "ingame_channel": "In-game channel", "contacts": "Contacts", "active": "Shown in search",
+}
+
+
+def _snapshot(advert: Advert) -> dict:
+    snap = {f: getattr(advert, f) for f in REVISION_FIELDS if f != "contacts"}
+    snap["contacts"] = [c["name"] for c in (advert.contacts or [])]
+    return snap
 
 
 def _alert_once(advert: Advert, new_report: Report) -> None:
@@ -247,6 +361,7 @@ def edit_advert():
     if errors:
         return render_template("edit.html", advert=advert, form=form, errors=errors), 400
 
+    before = _snapshot(advert) if advert is not None else None
     if advert is None:
         advert = Advert(corporation_id=corp.corporation_id)
         db.session.add(advert)
@@ -264,6 +379,13 @@ def edit_advert():
     advert.active = bool(form.get("active"))
     advert.updated_by = g.character
     advert.last_confirmed_at = datetime.now(timezone.utc)
+    after = _snapshot(advert)
+    changed = [f for f in REVISION_FIELDS if before is None or before[f] != after[f]]
+    if changed:
+        db.session.add(AdvertRevision(
+            advert=advert, editor_id=g.character.character_id,
+            changed=["created"] if before is None else changed, snapshot=after,
+        ))
     db.session.commit()
 
     if advert.moderation_hidden:
