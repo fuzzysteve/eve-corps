@@ -13,22 +13,27 @@ def create_app(config: type[Config] | Config = Config) -> Flask:
 
     from . import models  # noqa: F401  (register models with the metadata)
     from .auth import bp as auth_bp
+    from .moderation import bp as moderation_bp
+    from .moderation import open_report_count
     from .views import bp as main_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(moderation_bp)
+    app.jinja_env.globals["open_report_count"] = open_report_count
 
-    from .auth import check_csrf, csrf_token, is_recruiter, load_current_character
+    from .auth import check_csrf, csrf_token, is_moderator, is_recruiter, load_current_character
 
     app.before_request(check_csrf)
     app.before_request(load_current_character)
-    app.jinja_env.globals.update(csrf_token=csrf_token, is_recruiter=is_recruiter)
+    app.jinja_env.globals.update(csrf_token=csrf_token, is_recruiter=is_recruiter, is_moderator=is_moderator)
 
     from . import choices
-    from .formatting import render_markdown
+    from .formatting import plain_text, render_markdown
 
     app.jinja_env.globals["choices"] = choices
     app.jinja_env.filters["markdown"] = render_markdown
+    app.jinja_env.filters["excerpt"] = plain_text
     app.after_request(security_headers)
 
     return app

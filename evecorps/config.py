@@ -16,6 +16,11 @@ class Config:
     EVE_CALLBACK_URL = os.environ.get("EVE_CALLBACK_URL", "")
     ESI_USER_AGENT = os.environ.get("ESI_USER_AGENT", "EveCorpsOnline/0.1")
 
+    # Members of these corporations can moderate adverts. Default: Fuzzwork Enterprises.
+    MODERATOR_CORP_IDS = frozenset(
+        int(x) for x in os.environ.get("MODERATOR_CORP_IDS", "98072480").split(",") if x.strip()
+    )
+
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"

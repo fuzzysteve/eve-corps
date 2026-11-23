@@ -1,21 +1,133 @@
 {% extends "base.html" %}
-{% from "_macros.html" import badges %}
-{% block title %}{{ advert.corporation.name }} - Eve-Corps.Online{% endblock %}
+{% from "_macros.html" import badges, tag_summary %}
+{% set corp = advert.corporation %}
+{% block title %}{{ corp.name }} - Eve-Corps.Online{% endblock %}
+{% block meta %}
+{% set summary = tag_summary(advert) | trim %}
+{% set desc = (summary ~ " — " if summary else "") ~ (advert.body | excerpt(180)) %}
+<meta name="description" content="{{ desc }}">
+<meta property="og:site_name" content="Eve-Corps.Online">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{ corp.name }} [{{ corp.ticker }}] is recruiting: {{ advert.title }}">
+<meta property="og:description" content="{{ desc }}">
+<meta property="og:url" content="{{ url_for('main.corp', corporation_id=corp.corporation_id, _external=True) }}">
+<meta property="og:image" content="https://images.evetech.net/corporations/{{ corp.corporation_id }}/logo?size=256">
+<meta property="og:image:width" content="256">
+<meta property="og:image:height" content="256">
+<meta name="twitter:card" content="summary">
+{% endblock %}
 {% block maincontent %}
-<article class="card">
-  <div class="card-body">
-    <div class="d-flex gap-3 mb-3">
-      <img src="https://images.evetech.net/corporations/{{ advert.corporation_id }}/logo?size=128" width="128" height="128" alt="" class="flex-shrink-0">
-      <div>
-        <h1 class="h3">{{ advert.title }}</h1>
-        <div class="text-body-secondary mb-2">{{ advert.corporation.name }} [{{ advert.corporation.ticker }}]{% if advert.corporation.member_count %} · {{ advert.corporation.member_count }} members{% endif %}</div>
-        {{ badges(advert) }}
-        {% if not advert.active %}<span class="badge text-bg-danger">Hidden</span>{% endif %}
+{% if not advert.public %}
+  <div class="alert alert-warning">
+    {% if advert.moderation_hidden %}
+      <strong>Hidden by moderators.</strong> Reason: {{ advert.moderation_reason }}
+    {% else %}
+      This advert is hidden from search by the corporation's recruiters.
+    {% endif %}
+  </div>
+{% endif %}
+<div class="row g-4">
+  <article class="col-lg-8">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex gap-3 mb-3">
+          <img src="https://images.evetech.net/corporations/{{ corp.corporation_id }}/logo?size=128" width="128" height="128" alt="" class="flex-shrink-0">
+          <div>
+            <h1 class="h3">{{ advert.title }}</h1>
+            <div class="text-body-secondary mb-2">{{ corp.name }} [{{ corp.ticker }}]{% if corp.member_count %} · {{ corp.member_count }} members{% endif %}</div>
+            {{ badges(advert) }}
+          </div>
+        </div>
+        <div class="advert-body">{{ advert.body | markdown }}</div>
+        <p class="text-body-secondary small mt-3 mb-0"
+           title="Updated whenever one of the corporation's recruiters edits the advert or logs in to this site.">
+          Last updated {{ advert.last_confirmed_at.strftime('%Y-%m-%d') }}
+        </p>
+        {% if can_edit %}<a class="btn btn-primary mt-3" href="{{ url_for('main.edit_advert') }}">Edit advert</a>{% endif %}
       </div>
     </div>
-    <div class="advert-body">{{ advert.body | markdown }}</div>
-    <p class="text-body-secondary small mt-3 mb-0">Updated {{ advert.updated_at.strftime('%Y-%m-%d') }}</p>
-    {% if can_edit %}<a class="btn btn-primary mt-3" href="{{ url_for('main.edit_advert') }}">Edit advert</a>{% endif %}
-  </div>
-</article>
+  </article>
+
+  <aside class="col-lg-4 d-flex flex-column gap-4">
+    {% if advert.discord_url or advert.website_url or advert.ingame_channel or advert.contacts %}
+    <section class="card card-body">
+      <h2 class="h5">Get in touch</h2>
+      <div class="d-flex flex-column gap-2">
+        {% if advert.discord_url %}<a class="btn btn-primary" href="{{ advert.discord_url }}" rel="nofollow noopener noreferrer ugc">Join their Discord</a>{% endif %}
+        {% if advert.website_url %}<a class="btn btn-outline-secondary" href="{{ advert.website_url }}" rel="nofollow noopener noreferrer ugc">Website</a>{% endif %}
+        {% if advert.ingame_channel %}<div>In-game channel: <strong class="user-select-all">{{ advert.ingame_channel }}</strong></div>{% endif %}
+        {% if advert.contacts %}
+          <div>Talk to:</div>
+          <ul class="list-unstyled mb-0">
+          {% for c in advert.contacts %}
+            <li class="d-flex align-items-center gap-2 mb-1">
+              <img src="https://images.evetech.net/characters/{{ c.id }}/portrait?size=32" width="32" height="32" class="rounded" alt="">
+              <a href="https://evewho.com/character/{{ c.id }}" rel="noopener noreferrer">{{ c.name }}</a>
+            </li>
+          {% endfor %}
+          </ul>
+        {% endif %}
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="card card-body">
+      <h2 class="h5">Check them out</h2>
+      <ul class="list-unstyled mb-0">
+        <li><a href="https://zkillboard.com/corporation/{{ corp.corporation_id }}/" rel="noopener noreferrer">zKillboard</a> <span class="text-body-secondary small">kills and losses</span></li>
+        <li><a href="https://evewho.com/corporation/{{ corp.corporation_id }}" rel="noopener noreferrer">EveWho</a> <span class="text-body-secondary small">members and history</span></li>
+        <li><a href="https://evemaps.dotlan.net/corp/{{ corp.name | replace(' ', '_') | urlencode }}" rel="noopener noreferrer">DOTLAN</a> <span class="text-body-secondary small">alliance and sovereignty</span></li>
+        {% if corp.alliance_id %}
+        <li class="mt-2">Their alliance:
+          <a href="https://zkillboard.com/alliance/{{ corp.alliance_id }}/" rel="noopener noreferrer">zKillboard</a> ·
+          <a href="https://evewho.com/alliance/{{ corp.alliance_id }}" rel="noopener noreferrer">EveWho</a>
+        </li>
+        {% endif %}
+      </ul>
+    </section>
+
+    {% if moderator %}
+    <section class="card card-body border-warning">
+      <h2 class="h5">Moderation</h2>
+      {% set open_reports = advert.reports | selectattr('resolved_at', 'none') | list %}
+      {% if open_reports %}
+        <p class="mb-2">{{ open_reports | length }} open report{{ 's' if open_reports | length != 1 }}:</p>
+        <ul class="small">
+          {% for r in open_reports %}<li>{{ r.reason }} <span class="text-body-secondary">({{ r.reporter.name }}, {{ r.created_at.strftime('%Y-%m-%d') }})</span></li>{% endfor %}
+        </ul>
+        <form method="post" action="{{ url_for('moderation.dismiss', advert_id=advert.id) }}" class="mb-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-outline-secondary">Dismiss reports</button>
+        </form>
+      {% endif %}
+      {% if advert.moderation_hidden %}
+        <form method="post" action="{{ url_for('moderation.unhide', advert_id=advert.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-sm btn-warning">Unhide advert</button>
+        </form>
+      {% else %}
+        <form method="post" action="{{ url_for('moderation.hide', advert_id=advert.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label class="form-label small" for="hide-reason">Reason (shown to the corp's recruiters)</label>
+          <textarea class="form-control form-control-sm mb-2" id="hide-reason" name="reason" rows="2" maxlength="1000" required></textarea>
+          <button class="btn btn-sm btn-danger">Hide advert</button>
+        </form>
+      {% endif %}
+    </section>
+    {% elif g.character and not can_edit and advert.public %}
+    <details class="card card-body small">
+      <summary class="text-body-secondary">Report this advert</summary>
+      {% if already_reported %}
+        <p class="mt-2 mb-0">You've reported this advert; the moderators will take a look.</p>
+      {% else %}
+        <form method="post" action="{{ url_for('main.report', corporation_id=corp.corporation_id) }}" class="mt-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <textarea class="form-control form-control-sm mb-2" name="reason" rows="2" maxlength="1000" required placeholder="What's wrong with it?"></textarea>
+          <button class="btn btn-sm btn-outline-danger">Send report</button>
+        </form>
+      {% endif %}
+    </details>
+    {% endif %}
+  </aside>
+</div>
 {% endblock %}

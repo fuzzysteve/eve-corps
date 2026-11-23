@@ -4,16 +4,19 @@ from datetime import datetime, timedelta, timezone
 import requests
 from flask import Blueprint, abort, current_app, flash, g, redirect, request, session, url_for
 from jwt import PyJWTError
+from sqlalchemy import select
 
 from . import esi, sso
 from .extensions import db
-from .models import Character, Corporation
+from .models import Advert, Character, Corporation
 
 bp = Blueprint("auth", __name__)
 
 ROLES_SCOPE = "esi-characters.read_corporation_roles.v1"
 # How long a roles check stays good before we ask the recruiter to log in again.
 RECRUITER_TTL = timedelta(hours=24)
+# How long a corp-membership check (for moderators) stays good.
+MODERATOR_TTL = timedelta(hours=24)
 
 
 def load_current_character() -> None:
@@ -71,6 +74,7 @@ def callback():
     try:
         affiliation = esi.get_affiliation(char_id)
         character.corporation = refresh_corporation(affiliation["corporation_id"])
+        character.corp_verified_at = datetime.now(timezone.utc)
     except requests.RequestException:
         # Not fatal for a plain login, but the stored corp may now be stale.
         corp_ok = False
@@ -148,8 +152,13 @@ def check_recruiter(character: Character, access_token: str, claims: dict) -> No
             return
 
     if allowed:
+        now = datetime.now(timezone.utc)
         character.recruiter_corp_id = corp.corporation_id
-        character.recruiter_verified_at = datetime.now(timezone.utc)
+        character.recruiter_verified_at = now
+        # A verified recruiter logging in shows the corp is still active.
+        advert = db.session.scalar(select(Advert).where(Advert.corporation_id == corp.corporation_id))
+        if advert is not None:
+            advert.last_confirmed_at = now
     else:
         flash(f"Only directors and recruiters (Personnel Manager role) of {corp.name} can manage its advert.", "warning")
 
@@ -160,6 +169,15 @@ def is_recruiter(character: Character | None) -> bool:
     if character.recruiter_corp_id != character.corporation_id:
         return False
     return datetime.now(timezone.utc) - character.recruiter_verified_at < RECRUITER_TTL
+
+
+def is_moderator(character: Character | None) -> bool:
+    """Member of a moderator corp, with membership confirmed by ESI in the last day."""
+    if character is None or character.corp_verified_at is None:
+        return False
+    if character.corporation_id not in current_app.config["MODERATOR_CORP_IDS"]:
+        return False
+    return datetime.now(timezone.utc) - character.corp_verified_at < MODERATOR_TTL
 
 
 def csrf_token() -> str:

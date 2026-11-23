@@ -2,9 +2,10 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, Uuid, func, true,
+    BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, Uuid, false, func,
+    text, true,
 )
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .extensions import db
@@ -48,6 +49,8 @@ class Character(db.Model):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # When ESI last confirmed corporation_id (affiliation lookup at login succeeded).
+    corp_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     corporation: Mapped[Corporation | None] = relationship(back_populates="characters")
     # Set when an SSO login with the roles scope showed Director/Personnel_Manager
@@ -84,7 +87,23 @@ class Advert(db.Model):
     # Minimum skill points required; whole SP, 0 = no requirement.
     min_sp: Mapped[int] = mapped_column(BigInteger, default=0)
 
+    # Structured contact details. contacts is [{"id": <character_id>, "name": str}, ...],
+    # resolved through ESI when the advert is saved.
+    discord_url: Mapped[str | None] = mapped_column(String(200))
+    website_url: Mapped[str | None] = mapped_column(String(300))
+    ingame_channel: Mapped[str | None] = mapped_column(String(60))
+    contacts: Mapped[list[dict]] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
+
+    # Set by the corp's recruiters.
     active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    # Set by moderators; recruiters can't override it.
+    moderation_hidden: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    moderation_reason: Mapped[str | None] = mapped_column(Text)
+    # Bumped whenever a recruiter of this corp saves the advert or logs in as recruiter,
+    # so readers can see the corp is still around. Shown as "Last updated".
+    last_confirmed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), default=func.now()
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -93,3 +112,47 @@ class Advert(db.Model):
 
     corporation: Mapped[Corporation] = relationship(back_populates="advert")
     updated_by: Mapped[Character | None] = relationship()
+
+    reports: Mapped[list["Report"]] = relationship(back_populates="advert", cascade="all, delete-orphan")
+
+    @property
+    def public(self) -> bool:
+        return self.active and not self.moderation_hidden
+
+
+class Report(db.Model):
+    """A reader flagging an advert for moderators."""
+
+    __tablename__ = "report"
+    __table_args__ = (
+        # One open report per reader per advert.
+        Index("uq_report_open", "advert_id", "reporter_id", unique=True,
+              postgresql_where=text("resolved_at IS NULL")),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    advert_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("advert.id", ondelete="CASCADE"), index=True)
+    reporter_id: Mapped[int] = mapped_column(ForeignKey("character.character_id"))
+    reason: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_by_id: Mapped[int | None] = mapped_column(ForeignKey("character.character_id"))
+
+    advert: Mapped[Advert] = relationship(back_populates="reports")
+    reporter: Mapped[Character] = relationship(foreign_keys=[reporter_id])
+
+
+class ModerationLog(db.Model):
+    """Audit trail of moderator actions."""
+
+    __tablename__ = "moderation_log"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    advert_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("advert.id", ondelete="CASCADE"), index=True)
+    moderator_id: Mapped[int] = mapped_column(ForeignKey("character.character_id"))
+    action: Mapped[str] = mapped_column(String(20))  # hide / unhide / dismiss
+    reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    advert: Mapped[Advert] = relationship()
+    moderator: Mapped[Character] = relationship()

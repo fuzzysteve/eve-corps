@@ -8,6 +8,10 @@
 {%- endmacro %}
 <div class="card card-body">
   <h1 class="h4">{{ 'Edit' if advert else 'Create' }} advert for {{ corp.name }} [{{ corp.ticker }}]</h1>
+  {% if advert and advert.moderation_hidden %}
+    <div class="alert alert-warning"><strong>Hidden by moderators.</strong> Reason: {{ advert.moderation_reason }}<br>
+    You can still edit it; it stays hidden until a moderator reviews it again.</div>
+  {% endif %}
   {% for e in errors %}<div class="alert alert-danger">{{ e }}</div>{% endfor %}
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -60,6 +64,29 @@
       <label class="form-label" for="min_sp">Minimum skill points</label>
       <input class="form-control" id="min_sp" name="min_sp" placeholder="0 for none, or e.g. 5m" value="{{ form.get('min_sp', '') if form else (advert.min_sp if advert else '') }}">
     </div>
+    <fieldset class="mb-3">
+      <legend class="fs-6 fw-semibold">Contact</legend>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label" for="discord_url">Discord invite</label>
+          <input class="form-control" id="discord_url" name="discord_url" maxlength="200" placeholder="https://discord.gg/abc123" value="{{ val('discord_url') if (form or (advert and advert.discord_url)) else '' }}">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="website_url">Website</label>
+          <input class="form-control" id="website_url" name="website_url" maxlength="300" placeholder="https://..." value="{{ val('website_url') if (form or (advert and advert.website_url)) else '' }}">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="ingame_channel">In-game recruitment channel</label>
+          <input class="form-control" id="ingame_channel" name="ingame_channel" maxlength="60" value="{{ val('ingame_channel') if (form or (advert and advert.ingame_channel)) else '' }}">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label" for="contacts">Contact characters (up to 3, one per line)</label>
+          <textarea class="form-control" id="contacts" name="contacts" rows="3">{% if form %}{{ form.get('contacts', '') }}{% elif advert %}{{ advert.contacts | map(attribute='name') | join('
+') }}{% endif %}</textarea>
+          <div class="form-text">Exact character names; we check them with EVE.</div>
+        </div>
+      </div>
+    </fieldset>
     <div class="form-check mb-3"><input class="form-check-input" type="checkbox" name="active" value="1" id="e-active" {% if active %}checked{% endif %}><label class="form-check-label" for="e-active">Show this advert in search</label></div>
     <button class="btn btn-primary">Save</button>
   </form>

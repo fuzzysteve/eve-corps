@@ -1,5 +1,8 @@
 import math
+import re
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+from urllib.parse import urlsplit
 
 import requests
 from flask import (
@@ -8,11 +11,11 @@ from flask import (
 )
 from sqlalchemy import select
 
-from . import choices
-from .auth import is_recruiter, refresh_corporation
+from . import choices, esi
+from .auth import is_moderator, is_recruiter, refresh_corporation
 from .extensions import db
 from .formatting import eve_description_to_markdown, render_markdown
-from .models import Advert, Corporation
+from .models import Advert, Corporation, Report
 
 bp = Blueprint("main", __name__)
 
@@ -20,6 +23,8 @@ PER_PAGE = 25
 TITLE_MAX = 120
 BODY_MAX = 10_000
 SP_MAX = 1_000_000_000
+MAX_CONTACTS = 3
+DISCORD_INVITE = re.compile(r"^https://(?:www\.)?(?:discord\.gg|discord\.com/invite)/[A-Za-z0-9-]{2,32}/?$")
 
 
 @bp.route("/")
@@ -61,13 +66,44 @@ def _parse_sp(raw: str) -> int | None:
     return sp if 0 <= sp <= SP_MAX else None
 
 
+def _clean_discord(raw: str) -> tuple[str | None, str | None]:
+    """(value, error). Only discord.gg / discord.com/invite links."""
+    raw = raw.strip()
+    if not raw:
+        return None, None
+    if not raw.startswith(("http://", "https://")):
+        raw = "https://" + raw
+    raw = raw.replace("http://", "https://", 1)
+    if not DISCORD_INVITE.match(raw):
+        return None, "Discord must be an invite link like https://discord.gg/abc123."
+    return raw.rstrip("/"), None
+
+
+def _clean_website(raw: str) -> tuple[str | None, str | None]:
+    raw = raw.strip()
+    if not raw:
+        return None, None
+    if not raw.startswith(("http://", "https://")):
+        raw = "https://" + raw
+    parts = urlsplit(raw)
+    if parts.scheme not in ("http", "https") or "." not in (parts.hostname or "") or len(raw) > 300:
+        return None, "Website must be a web address like https://example.com (at most 300 characters)."
+    return raw, None
+
+
+def _contact_names(raw: str) -> list[str]:
+    """One character name per line (commas also accepted), de-duplicated."""
+    names = [n.strip() for n in re.split(r"[\n,]", raw) if n.strip()]
+    return list(dict.fromkeys(names))
+
+
 @bp.route("/corps")
 def browse():
     stmt = (
         select(Advert)
         .join(Advert.corporation)
-        .where(Advert.active.is_(True))
-        .order_by(Advert.updated_at.desc())
+        .where(Advert.active.is_(True), Advert.moderation_hidden.is_(False))
+        .order_by(Advert.last_confirmed_at.desc())
     )
     filters = {name: _selected(request.args, name) for name in choices.MULTI}
     for name, values in filters.items():
@@ -103,9 +139,38 @@ def corp(corporation_id: int):
     if advert is None:
         abort(404)
     can_edit = is_recruiter(g.character) and g.character.recruiter_corp_id == corporation_id
-    if not advert.active and not can_edit:
+    moderator = is_moderator(g.character)
+    if not advert.public and not (can_edit or moderator):
         abort(404)
-    return render_template("corp.html", advert=advert, can_edit=can_edit)
+    already_reported = g.character is not None and any(
+        r.reporter_id == g.character.character_id and r.resolved_at is None for r in advert.reports
+    )
+    return render_template(
+        "corp.html", advert=advert, can_edit=can_edit, moderator=moderator,
+        already_reported=already_reported,
+    )
+
+
+@bp.route("/corps/<int:corporation_id>/report", methods=["POST"])
+def report(corporation_id: int):
+    if g.character is None:
+        flash("Log in with EVE Online to report an advert.", "warning")
+        return redirect(url_for("main.corp", corporation_id=corporation_id))
+    advert = db.session.scalar(select(Advert).where(Advert.corporation_id == corporation_id))
+    if advert is None or not advert.public:
+        abort(404)
+    reason = request.form.get("reason", "").strip()
+    if not reason or len(reason) > 1000:
+        flash("Please say briefly what's wrong (up to 1000 characters).", "warning")
+        return redirect(url_for("main.corp", corporation_id=corporation_id))
+    open_report = any(
+        r.reporter_id == g.character.character_id and r.resolved_at is None for r in advert.reports
+    )
+    if not open_report:
+        db.session.add(Report(advert=advert, reporter_id=g.character.character_id, reason=reason))
+        db.session.commit()
+    flash("Thanks, the moderators will take a look.", "success")
+    return redirect(url_for("main.corp", corporation_id=corporation_id))
 
 
 @bp.route("/advert", methods=["GET", "POST"])
@@ -130,6 +195,34 @@ def edit_advert():
         errors.append(f"Description is required and must be at most {BODY_MAX:,} characters.")
     if min_sp is None:
         errors.append("Minimum skill points must be a whole number like 5000000 or 5m.")
+
+    discord_url, err = _clean_discord(form.get("discord_url", ""))
+    if err:
+        errors.append(err)
+    website_url, err = _clean_website(form.get("website_url", ""))
+    if err:
+        errors.append(err)
+    ingame_channel = form.get("ingame_channel", "").strip() or None
+    if ingame_channel and len(ingame_channel) > 60:
+        errors.append("In-game channel name must be at most 60 characters.")
+
+    names = _contact_names(form.get("contacts", ""))
+    contacts = advert.contacts if advert else []
+    if len(names) > MAX_CONTACTS:
+        errors.append(f"List at most {MAX_CONTACTS} contact characters.")
+    elif [n.lower() for n in names] != [c["name"].lower() for c in contacts]:
+        # Names changed: check they're real characters (exact name match).
+        try:
+            found = esi.resolve_character_names(names)
+        except requests.RequestException:
+            found = None
+            errors.append("Couldn't check the contact names with EVE just now, please try again.")
+        if found is not None:
+            missing = [n for n in names if n.lower() not in found]
+            if missing:
+                errors.append("No EVE character found named: " + ", ".join(missing) + ". Names must match exactly.")
+            contacts = [found[n.lower()] for n in names if n.lower() in found]
+
     if errors:
         return render_template("edit.html", advert=advert, form=form, errors=errors), 400
 
@@ -143,11 +236,19 @@ def edit_advert():
     advert.newbro_friendly = bool(form.get("newbro"))
     advert.srp = bool(form.get("srp"))
     advert.min_sp = min_sp
+    advert.discord_url = discord_url
+    advert.website_url = website_url
+    advert.ingame_channel = ingame_channel
+    advert.contacts = contacts
     advert.active = bool(form.get("active"))
     advert.updated_by = g.character
+    advert.last_confirmed_at = datetime.now(timezone.utc)
     db.session.commit()
 
-    flash("Advert saved." if advert.active else "Advert saved (hidden from search).", "success")
+    if advert.moderation_hidden:
+        flash("Advert saved, but it stays hidden until a moderator reviews it.", "warning")
+    else:
+        flash("Advert saved." if advert.active else "Advert saved (hidden from search).", "success")
     return redirect(url_for("main.corp", corporation_id=corp.corporation_id))
 
 

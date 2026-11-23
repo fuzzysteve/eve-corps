@@ -10,6 +10,7 @@ Safety comes from three independent layers:
 """
 
 import ast
+import html as html_lib
 import re
 from html.parser import HTMLParser
 
@@ -179,3 +180,14 @@ def eve_description_to_markdown(raw: str | None) -> str:
     parser.feed(_unwrap_python_literal(raw))
     parser.close()
     return parser.result()
+
+
+def plain_text(source: str | None, limit: int = 200) -> str:
+    """Advert Markdown as a short plain-text excerpt (for link previews)."""
+    html = _md.render(source or "")
+    text = nh3.clean(html, tags=set())  # drop every tag, keep the text
+    # nh3 leaves entities encoded; the result is autoescaped again by Jinja.
+    text = re.sub(r"\s+", " ", html_lib.unescape(text)).strip()
+    if len(text) > limit:
+        text = text[: limit - 1].rsplit(" ", 1)[0].rstrip(",.;:") + "…"
+    return text

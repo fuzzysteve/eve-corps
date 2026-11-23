@@ -40,7 +40,7 @@
           <img src="https://images.evetech.net/corporations/{{ advert.corporation_id }}/logo?size=64" width="64" height="64" alt="" class="flex-shrink-0">
           <div>
             <h2 class="h5 mb-1"><a href="{{ url_for('main.corp', corporation_id=advert.corporation_id) }}">{{ advert.title }}</a></h2>
-            <div class="text-body-secondary small mb-2">{{ advert.corporation.name }} [{{ advert.corporation.ticker }}]{% if advert.corporation.member_count %} · {{ advert.corporation.member_count }} members{% endif %}</div>
+            <div class="text-body-secondary small mb-2">{{ advert.corporation.name }} [{{ advert.corporation.ticker }}]{% if advert.corporation.member_count %} · {{ advert.corporation.member_count }} members{% endif %} · updated {{ advert.last_confirmed_at.strftime('%Y-%m-%d') }}</div>
             {{ badges(advert) }}
           </div>
         </div>

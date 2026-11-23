@@ -10,6 +10,17 @@
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#4fc3f7">
+{% block meta %}
+<meta name="description" content="Find an EVE Online corporation to join, filtered by timezone, language, activities and more.">
+<meta property="og:site_name" content="Eve-Corps.Online">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Eve-Corps.Online - Recruitment done differently">
+<meta property="og:description" content="Find an EVE Online corporation to join, filtered by timezone, language, activities and more.">
+<meta property="og:url" content="{{ request.base_url }}">
+<meta property="og:image" content="{{ url_for('static', filename='apple-touch-icon.png', _external=True) }}">
+<meta name="twitter:card" content="summary">
+{% endblock %}
 {% block extrahead %}{% endblock %}
 </head>
 <body class="d-flex flex-column min-vh-100">
@@ -21,6 +32,7 @@
     {% if g.character %}
       <img src="https://images.evetech.net/characters/{{ g.character.character_id }}/portrait?size=32" width="32" height="32" class="rounded" alt="">
       <span>{{ g.character.name }}{% if g.character.corporation %} [{{ g.character.corporation.ticker }}]{% endif %}</span>
+      {% if is_moderator(g.character) %}{% set n = open_report_count() %}<a class="btn btn-sm btn-outline-warning" href="{{ url_for('moderation.queue') }}">Moderation{% if n %} <span class="badge text-bg-warning">{{ n }}</span>{% endif %}</a>{% endif %}
       {% if is_recruiter(g.character) %}<a class="btn btn-sm btn-primary" href="{{ url_for('main.edit_advert') }}">Your corp advert</a>{% endif %}
       <form method="post" action="{{ url_for('auth.logout') }}" class="m-0">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -42,10 +54,10 @@
   {% endwith %}
   {% block maincontent %}{% endblock %}
 </main>
-<footer class="footer py-2">
-  <div class="container-xxl d-flex justify-content-between small">
-    <span>Contact: Steve Ronuken</span>
-    <span>CCP Copyright Note</span>
+<footer class="footer py-3">
+  <div class="container-xxl small">
+    <p class="mb-2">Contact: Steve Ronuken</p>
+    <p class="mb-0 ccp-notice">EVE Online and the EVE logo are the registered trademarks of CCP hf. All rights are reserved worldwide. All other trademarks are the property of their respective owners. EVE Online, the EVE logo, EVE and all associated logos and designs are the intellectual property of CCP hf. All artwork, screenshots, characters, vehicles, storylines, world facts or other recognizable features of the intellectual property relating to these trademarks are likewise the intellectual property of CCP hf. CCP hf. has granted permission to eve-corps.online to use EVE Online and all associated logos and designs for promotional and information purposes on its website but does not endorse, and is not in any way affiliated with, eve-corps.online. CCP is in no way responsible for the content on or functioning of this website, nor can it be liable for any damage arising from the use of this website.</p>
   </div>
 </footer>
 {% block scripts %}{% endblock %}

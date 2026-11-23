@@ -17,3 +17,13 @@
 {% endmacro %}
 
 {% set field_labels = {"timezones": "Timezone", "languages": "Language", "activities": "Activities", "space": "Space"} %}
+
+{% macro tag_summary(advert) -%}
+  {%- set parts = [] -%}
+  {%- for name, opts in choices.MULTI.items() -%}
+    {%- for key in advert[name] -%}{%- set _ = parts.append(opts[key]) -%}{%- endfor -%}
+  {%- endfor -%}
+  {%- if advert.newbro_friendly %}{% set _ = parts.append("New-player friendly") %}{% endif -%}
+  {%- if advert.srp %}{% set _ = parts.append("SRP") %}{% endif -%}
+  {{- parts | join(" · ") -}}
+{%- endmacro %}

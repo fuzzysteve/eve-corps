@@ -59,3 +59,12 @@ def get_roles(character_id: int, access_token: str) -> dict:
     resp = s.get(f"{ESI_BASE}/characters/{character_id}/roles", timeout=TIMEOUT)
     resp.raise_for_status()
     return resp.json()
+
+
+def resolve_character_names(names: list[str]) -> dict[str, dict]:
+    """Exact-name lookup: {lowercased name: {"id": ..., "name": canonical name}} for characters found."""
+    if not names:
+        return {}
+    resp = _session().post(f"{ESI_BASE}/universe/ids", json=sorted(set(names)), timeout=TIMEOUT)
+    resp.raise_for_status()
+    return {c["name"].lower(): {"id": c["id"], "name": c["name"]} for c in resp.json().get("characters", [])}

@@ -11,6 +11,10 @@ body {
   background-color: #353535;
   color: #ddd;
 }
+.ccp-notice {
+  font-size: 0.75rem;
+  color: #aaa;
+}
 
 .advert-body {
   overflow-wrap: anywhere;

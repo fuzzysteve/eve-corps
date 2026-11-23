@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Moderation - Eve-Corps.Online{% endblock %}
+{% block maincontent %}
+<div class="card card-body">
+<h1 class="h3 mb-4">Moderation</h1>
+
+<section class="mb-5">
+  <h2 class="h5">Open reports</h2>
+  {% for advert in reported %}
+    {% set open_reports = advert.reports | selectattr('resolved_at', 'none') | list %}
+    <div class="card card-body mb-3 bg-body-tertiary">
+      <div class="d-flex justify-content-between flex-wrap gap-2">
+        <div>
+          <a href="{{ url_for('main.corp', corporation_id=advert.corporation_id) }}">{{ advert.corporation.name }} [{{ advert.corporation.ticker }}]</a>: {{ advert.title }}
+          {% if advert.moderation_hidden %}<span class="badge text-bg-danger">Hidden</span>{% endif %}
+        </div>
+        <form method="post" action="{{ url_for('moderation.dismiss', advert_id=advert.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="next" value="queue">
+          <button class="btn btn-sm btn-outline-secondary">Dismiss</button>
+        </form>
+      </div>
+      <ul class="small mt-2 mb-2">
+        {% for r in open_reports %}<li>{{ r.reason }} <span class="text-body-secondary">({{ r.reporter.name }}, {{ r.created_at.strftime('%Y-%m-%d %H:%M') }})</span></li>{% endfor %}
+      </ul>
+      {% if not advert.moderation_hidden %}
+      <form method="post" action="{{ url_for('moderation.hide', advert_id=advert.id) }}" class="d-flex gap-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="next" value="queue">
+        <input class="form-control form-control-sm" name="reason" maxlength="1000" required placeholder="Reason for hiding (shown to recruiters)">
+        <button class="btn btn-sm btn-danger text-nowrap">Hide</button>
+      </form>
+      {% endif %}
+    </div>
+  {% else %}
+    <p class="text-body-secondary">No open reports.</p>
+  {% endfor %}
+</section>
+
+<section class="mb-5">
+  <h2 class="h5">Hidden by moderators</h2>
+  {% for advert in hidden %}
+    <div class="card card-body mb-2 bg-body-tertiary d-flex flex-row justify-content-between align-items-center gap-2">
+      <div>
+        <a href="{{ url_for('main.corp', corporation_id=advert.corporation_id) }}">{{ advert.corporation.name }} [{{ advert.corporation.ticker }}]</a>
+        <div class="small text-body-secondary">{{ advert.moderation_reason }}</div>
+      </div>
+      <form method="post" action="{{ url_for('moderation.unhide', advert_id=advert.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="next" value="queue">
+        <button class="btn btn-sm btn-warning">Unhide</button>
+      </form>
+    </div>
+  {% else %}
+    <p class="text-body-secondary">Nothing hidden.</p>
+  {% endfor %}
+</section>
+
+<section>
+  <h2 class="h5">Recent actions</h2>
+  {% if log %}
+  <ul class="list-unstyled small">
+    {% for entry in log %}
+      <li>{{ entry.created_at.strftime('%Y-%m-%d %H:%M') }}: <strong>{{ entry.moderator.name }}</strong> {{ {'hide': 'hid', 'unhide': 'unhid', 'dismiss': 'dismissed reports on'}[entry.action] }}
+        <a href="{{ url_for('main.corp', corporation_id=entry.advert.corporation_id) }}">{{ entry.advert.corporation.name }}</a>{% if entry.reason %}: {{ entry.reason }}{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+    <p class="text-body-secondary">No actions yet.</p>
+  {% endif %}
+</section>
+</div>
+{% endblock %}
