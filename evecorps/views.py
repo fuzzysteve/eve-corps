@@ -9,12 +9,13 @@ from flask import (
     Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template, request,
     send_from_directory, url_for,
 )
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from . import choices, esi
 from .auth import is_moderator, is_recruiter, refresh_corporation
 from .extensions import db
 from .formatting import eve_description_to_markdown, render_markdown
+from .notify import post_report_alert
 from .models import Advert, Corporation, Report
 
 bp = Blueprint("main", __name__)
@@ -167,10 +168,30 @@ def report(corporation_id: int):
         r.reporter_id == g.character.character_id and r.resolved_at is None for r in advert.reports
     )
     if not open_report:
-        db.session.add(Report(advert=advert, reporter_id=g.character.character_id, reason=reason))
+        new_report = Report(advert=advert, reporter_id=g.character.character_id, reason=reason)
+        db.session.add(new_report)
         db.session.commit()
+        _alert_once(advert, new_report)
     flash("Thanks, the moderators will take a look.", "success")
     return redirect(url_for("main.corp", corporation_id=corporation_id))
+
+
+def _alert_once(advert: Advert, new_report: Report) -> None:
+    """Post the first report on an advert to the admin channel; never post again for it."""
+    # Atomic claim, so two reports arriving together can't both post.
+    claimed = db.session.execute(
+        update(Advert)
+        .where(Advert.id == advert.id, Advert.report_notified_at.is_(None))
+        .values(report_notified_at=datetime.now(timezone.utc))
+        .returning(Advert.id)
+    ).first()
+    db.session.commit()
+    if claimed is None:
+        return
+    if not post_report_alert(advert, new_report):
+        # Didn't go out (or alerts are off): release the claim so a later report can post.
+        db.session.execute(update(Advert).where(Advert.id == advert.id).values(report_notified_at=None))
+        db.session.commit()
 
 
 @bp.route("/advert", methods=["GET", "POST"])

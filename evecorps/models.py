@@ -99,6 +99,9 @@ class Advert(db.Model):
     # Set by moderators; recruiters can't override it.
     moderation_hidden: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     moderation_reason: Mapped[str | None] = mapped_column(Text)
+    # When the first report on this advert was posted to the admin Discord channel.
+    # Only one post is ever made per advert.
+    report_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Bumped whenever a recruiter of this corp saves the advert or logs in as recruiter,
     # so readers can see the corp is still around. Shown as "Last updated".
     last_confirmed_at: Mapped[datetime] = mapped_column(

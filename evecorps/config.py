@@ -21,6 +21,10 @@ class Config:
         int(x) for x in os.environ.get("MODERATOR_CORP_IDS", "98072480").split(",") if x.strip()
     )
 
+    # File holding a Discord webhook URL for report alerts to the admin channel.
+    # Unset, missing or empty file = report alerts are off.
+    DISCORD_WEBHOOK_FILE = os.environ.get("DISCORD_WEBHOOK_FILE", "")
+
     SESSION_COOKIE_SECURE = True
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
