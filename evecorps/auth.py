@@ -37,12 +37,18 @@ def login():
 def callback():
     expected = session.pop("sso_state", None)
     wants_recruiter = session.pop("sso_recruiter", False)
+    back = _safe_next(session.pop("sso_next", ""))
     state = request.args.get("state", "")
     if not expected or not secrets.compare_digest(state, expected):
-        abort(400, "Invalid SSO state")
-    code = request.args.get("code")
-    if not code:
-        abort(400, "Missing authorization code")
+        # Stale tab, back button, or a replayed/forged callback: never log in,
+        # but send the user somewhere useful rather than a bare 400.
+        flash("That login link has expired, please log in again.", "warning")
+        return redirect(back)
+    if request.args.get("error") or not request.args.get("code"):
+        # The user cancelled or declined at EVE's login page.
+        flash("Login cancelled.", "info")
+        return redirect(back)
+    code = request.args["code"]
 
     try:
         tokens = sso.exchange_code(code)
@@ -51,7 +57,7 @@ def callback():
     except (requests.RequestException, PyJWTError, KeyError, ValueError):
         current_app.logger.exception("SSO login failed")
         flash("Login with EVE Online failed, please try again.", "danger")
-        return redirect(url_for("main.index"))
+        return redirect(back)
 
     character = db.session.get(Character, char_id)
     if character is None:
@@ -79,13 +85,19 @@ def callback():
 
     db.session.commit()
 
-    nxt = session.get("sso_next") or ""
     flashes = session.get("_flashes")
     session.clear()  # fresh session on login
     session["character_id"] = char_id
     if flashes:
         session["_flashes"] = flashes
-    return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("main.index"))
+    return redirect(back)
+
+
+def _safe_next(nxt: str) -> str:
+    """Only allow redirects to paths on this site."""
+    if nxt.startswith("/") and not nxt.startswith("//") and "\\" not in nxt:
+        return nxt
+    return url_for("main.index")
 
 
 @bp.route("/logout", methods=["POST"])

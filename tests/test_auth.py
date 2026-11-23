@@ -50,18 +50,49 @@ def test_login_creates_character_and_corp(client, fake_eve):
 
 def test_bad_state_rejected(client, fake_eve):
     start_login(client)
-    assert client.get("/sso/callback?code=abc&state=wrong").status_code == 400
+    resp = client.get("/sso/callback?code=abc&state=wrong")
+    assert resp.status_code == 302
     assert db.session.get(Character, 90000001) is None
+    with client.session_transaction() as s:
+        assert "character_id" not in s
+    assert b"expired" in client.get("/").data
+
+
+def test_callback_without_login_started(client, fake_eve):
+    resp = client.get("/sso/callback?code=abc&state=anything")
+    assert resp.status_code == 302 and resp.headers["Location"] == "/"
+    assert db.session.get(Character, 90000001) is None
+
+
+@pytest.mark.parametrize("query", [
+    "error=access_denied&state={state}",
+    "state={state}",
+])
+def test_cancel_at_eve_returns_to_page(client, fake_eve, query):
+    state = start_login(client, "/corps")
+    resp = client.get("/sso/callback?" + query.format(state=state))
+    assert resp.status_code == 302 and resp.headers["Location"] == "/corps"
+    assert db.session.get(Character, 90000001) is None
+    with client.session_transaction() as s:
+        assert "character_id" not in s and "sso_state" not in s
+    assert b"Login cancelled" in client.get("/corps").data
 
 
 def test_state_is_single_use(client, fake_eve):
     state = start_login(client)
     client.get(f"/sso/callback?code=abc&state={state}")
-    client.post("/logout")
-    assert client.get(f"/sso/callback?code=abc&state={state}").status_code == 400
+    with client.session_transaction() as s:
+        csrf = s.get("csrf") or "x"
+        s["csrf"] = csrf
+    client.post("/logout", data={"csrf_token": csrf})
+    client.get(f"/sso/callback?code=abc&state={state}")
+    with client.session_transaction() as s:
+        assert "character_id" not in s
 
 
-@pytest.mark.parametrize("nxt,expected", [("/foo", "/foo"), ("//evil.example", "/"), ("https://evil.example", "/")])
+@pytest.mark.parametrize("nxt,expected", [
+    ("/foo", "/foo"), ("//evil.example", "/"), ("https://evil.example", "/"), ("/\\evil.example", "/"),
+])
 def test_next_redirect_is_local_only(client, fake_eve, nxt, expected):
     state = start_login(client, nxt)
     resp = client.get(f"/sso/callback?code=abc&state={state}")
