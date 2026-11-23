@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badges, checkboxes, field_labels %}
+{% block title %}Find a Corp - Eve-Corps.Online{% endblock %}
+{% block maincontent %}
+<div class="row g-4">
+  <aside class="col-lg-3">
+    <form method="get" class="card card-body">
+      {% for name, opts in choices.MULTI.items() %}
+        <fieldset class="mb-3">
+          <legend class="fs-6 fw-semibold">{{ field_labels[name] }}</legend>
+          {{ checkboxes(name, opts, filters[name], 'f') }}
+        </fieldset>
+      {% endfor %}
+      <fieldset class="mb-3">
+        <legend class="fs-6 fw-semibold">Other</legend>
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="newbro" value="1" id="f-newbro" {% if request.args.newbro %}checked{% endif %}><label class="form-check-label" for="f-newbro">New-player friendly</label></div>
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="srp" value="1" id="f-srp" {% if request.args.srp %}checked{% endif %}><label class="form-check-label" for="f-srp">Offers SRP</label></div>
+      </fieldset>
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="f-alliance">Alliance</label>
+        <select class="form-select" name="alliance" id="f-alliance">
+          <option value="">Either</option>
+          <option value="yes" {% if alliance == 'yes' %}selected{% endif %}>In an alliance</option>
+          <option value="no" {% if alliance == 'no' %}selected{% endif %}>No alliance</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="f-sp">Your skill points</label>
+        <input class="form-control" name="my_sp" id="f-sp" placeholder="e.g. 20m" value="{{ request.args.my_sp or '' }}">
+        <div class="form-text">Hides corps whose minimum is above this.</div>
+      </div>
+      <button class="btn btn-primary">Filter</button>
+      <a class="btn btn-link" href="{{ url_for('main.browse') }}">Clear</a>
+    </form>
+  </aside>
+  <section class="col-lg-9">
+    {% for advert in adverts.items %}
+      <article class="card mb-3">
+        <div class="card-body d-flex gap-3">
+          <img src="https://images.evetech.net/corporations/{{ advert.corporation_id }}/logo?size=64" width="64" height="64" alt="" class="flex-shrink-0">
+          <div>
+            <h2 class="h5 mb-1"><a href="{{ url_for('main.corp', corporation_id=advert.corporation_id) }}">{{ advert.title }}</a></h2>
+            <div class="text-body-secondary small mb-2">{{ advert.corporation.name }} [{{ advert.corporation.ticker }}]{% if advert.corporation.member_count %} · {{ advert.corporation.member_count }} members{% endif %}</div>
+            {{ badges(advert) }}
+          </div>
+        </div>
+      </article>
+    {% else %}
+      <div class="card card-body">No corporations match those filters yet.</div>
+    {% endfor %}
+    {% if adverts.pages > 1 %}
+      {% set args = request.args.to_dict(flat=False) %}
+      <nav class="d-flex gap-2">
+        {% if adverts.has_prev %}{% set _ = args.update(page=[adverts.prev_num]) %}<a class="btn btn-outline-secondary" href="{{ url_for('main.browse', **args) }}">Previous</a>{% endif %}
+        <span class="align-self-center">Page {{ adverts.page }} of {{ adverts.pages }}</span>
+        {% if adverts.has_next %}{% set _ = args.update(page=[adverts.next_num]) %}<a class="btn btn-outline-secondary" href="{{ url_for('main.browse', **args) }}">Next</a>{% endif %}
+      </nav>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block maincontent %}
+<div class="boxout p-4 rounded">
+  <p>Eve-Corps.online is an out of game way to look for, and to advertise Corporations in Eve Online. It's currently under development, but functionality should be along shortly.</p>
+  <p>Filter on a variety of different attributes, in different combinations.</p>
+  <div class="d-flex justify-content-evenly mt-4">
+    <a class="btn btn-primary" href="{{ url_for('main.browse') }}">Find a Corp</a>
+    <a class="btn btn-primary" href="{{ url_for('main.edit_advert') }}">Put up a Corp Advert</a>
+  </div>
+</div>
+{% endblock %}

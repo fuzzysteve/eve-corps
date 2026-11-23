@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block maincontent %}
+<div class="card card-body">
+  <h1 class="h4">Directors and recruiters only</h1>
+  <p>Corporation adverts can be posted and edited by your CEO, directors, and members with the <strong>Personnel Manager</strong> role.</p>
+  <p>Logging in here asks EVE for one extra permission, to read your corporation roles. We check them once and don't keep the access token. The check lasts 24 hours; after that you'll need to log in again to edit.</p>
+  <a href="{{ url_for('auth.login', purpose='recruiter', next=url_for('main.edit_advert')) }}">
+    <img src="https://web.ccpgamescdn.com/eveonlineassets/developers/eve-sso-login-black-large.png" alt="Log in with EVE Online">
+  </a>
+</div>
+{% endblock %}

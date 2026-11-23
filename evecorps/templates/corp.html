@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badges %}
+{% block title %}{{ advert.corporation.name }} - Eve-Corps.Online{% endblock %}
+{% block maincontent %}
+<article class="card">
+  <div class="card-body">
+    <div class="d-flex gap-3 mb-3">
+      <img src="https://images.evetech.net/corporations/{{ advert.corporation_id }}/logo?size=128" width="128" height="128" alt="" class="flex-shrink-0">
+      <div>
+        <h1 class="h3">{{ advert.title }}</h1>
+        <div class="text-body-secondary mb-2">{{ advert.corporation.name }} [{{ advert.corporation.ticker }}]{% if advert.corporation.member_count %} · {{ advert.corporation.member_count }} members{% endif %}</div>
+        {{ badges(advert) }}
+        {% if not advert.active %}<span class="badge text-bg-danger">Hidden</span>{% endif %}
+      </div>
+    </div>
+    <div class="advert-body">{{ advert.body }}</div>
+    <p class="text-body-secondary small mt-3 mb-0">Updated {{ advert.updated_at.strftime('%Y-%m-%d') }}</p>
+    {% if can_edit %}<a class="btn btn-primary mt-3" href="{{ url_for('main.edit_advert') }}">Edit advert</a>{% endif %}
+  </div>
+</article>
+{% endblock %}

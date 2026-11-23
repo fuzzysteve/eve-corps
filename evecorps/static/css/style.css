@@ -1,0 +1,17 @@
+body {
+  background: #1a1a1a url("../images/background.jpg") center / cover fixed;
+}
+
+.boxout {
+  background: rgba(200, 200, 200, 0.7);
+  color: #111;
+}
+
+.footer {
+  background-color: #353535;
+  color: #ddd;
+}
+
+.advert-body {
+  white-space: pre-line;
+}

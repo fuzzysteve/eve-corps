@@ -1,0 +1,163 @@
+import secrets
+from datetime import datetime, timedelta, timezone
+
+import requests
+from flask import Blueprint, abort, current_app, flash, g, redirect, request, session, url_for
+from jwt import PyJWTError
+
+from . import esi, sso
+from .extensions import db
+from .models import Character, Corporation
+
+bp = Blueprint("auth", __name__)
+
+ROLES_SCOPE = "esi-characters.read_corporation_roles.v1"
+# How long a roles check stays good before we ask the recruiter to log in again.
+RECRUITER_TTL = timedelta(hours=24)
+
+
+def load_current_character() -> None:
+    char_id = session.get("character_id")
+    g.character = db.session.get(Character, char_id) if char_id else None
+
+
+@bp.route("/sso/login")
+def login():
+    state = secrets.token_urlsafe(24)
+    session["sso_state"] = state
+    session["sso_next"] = request.args.get("next", "")
+    # Plain login is identity only. Recruiters additionally grant the roles scope,
+    # used once at login to check Director/Personnel_Manager; the token is not kept.
+    recruiter = request.args.get("purpose") == "recruiter"
+    session["sso_recruiter"] = recruiter
+    return redirect(sso.authorize_url(state, [ROLES_SCOPE] if recruiter else []))
+
+
+@bp.route("/sso/callback")
+def callback():
+    expected = session.pop("sso_state", None)
+    wants_recruiter = session.pop("sso_recruiter", False)
+    state = request.args.get("state", "")
+    if not expected or not secrets.compare_digest(state, expected):
+        abort(400, "Invalid SSO state")
+    code = request.args.get("code")
+    if not code:
+        abort(400, "Missing authorization code")
+
+    try:
+        tokens = sso.exchange_code(code)
+        claims = sso.validate_token(tokens["access_token"])
+        char_id = sso.character_id_from_claims(claims)
+    except (requests.RequestException, PyJWTError, KeyError, ValueError):
+        current_app.logger.exception("SSO login failed")
+        flash("Login with EVE Online failed, please try again.", "danger")
+        return redirect(url_for("main.index"))
+
+    character = db.session.get(Character, char_id)
+    if character is None:
+        character = Character(character_id=char_id, name=claims["name"])
+        db.session.add(character)
+    character.name = claims["name"]
+    character.owner_hash = claims.get("owner")
+    character.last_login = datetime.now(timezone.utc)
+
+    corp_ok = True
+    try:
+        affiliation = esi.get_affiliation(char_id)
+        character.corporation = refresh_corporation(affiliation["corporation_id"])
+    except requests.RequestException:
+        # Not fatal for a plain login, but the stored corp may now be stale.
+        corp_ok = False
+        current_app.logger.warning("ESI affiliation lookup failed for %s", char_id, exc_info=True)
+
+    if wants_recruiter:
+        if corp_ok:
+            check_recruiter(character, tokens["access_token"], claims)
+        else:
+            character.recruiter_corp_id = character.recruiter_verified_at = None
+            flash("Couldn't look up your corporation with EVE, please try again.", "warning")
+
+    db.session.commit()
+
+    nxt = session.get("sso_next") or ""
+    flashes = session.get("_flashes")
+    session.clear()  # fresh session on login
+    session["character_id"] = char_id
+    if flashes:
+        session["_flashes"] = flashes
+    return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("main.index"))
+
+
+@bp.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
+    return redirect(url_for("main.index"))
+
+
+def refresh_corporation(corporation_id: int) -> Corporation:
+    """Return the corp row, re-fetching from ESI only once its cache has expired."""
+    corp = db.session.get(Corporation, corporation_id)
+    now = datetime.now(timezone.utc)
+    if corp is not None and corp.esi_expires and corp.esi_expires > now:
+        return corp
+
+    data, expires = esi.get_corporation(corporation_id)
+    if corp is None:
+        corp = Corporation(corporation_id=corporation_id)
+        db.session.add(corp)
+    corp.name = data["name"]
+    corp.ticker = data["ticker"]
+    corp.alliance_id = data.get("alliance_id")
+    corp.member_count = data.get("member_count")
+    corp.ceo_id = data.get("ceo_id")
+    corp.esi_expires = expires
+    return corp
+
+
+def check_recruiter(character: Character, access_token: str, claims: dict) -> None:
+    """Record whether this character may manage its corp's advert."""
+    character.recruiter_corp_id = None
+    character.recruiter_verified_at = None
+    corp = character.corporation
+    assert corp is not None
+    scopes = claims.get("scp") or []
+    if isinstance(scopes, str):
+        scopes = [scopes]
+
+    allowed = corp.ceo_id == character.character_id
+    if not allowed and ROLES_SCOPE in scopes:
+        try:
+            roles = esi.get_roles(character.character_id, access_token)
+            allowed = bool(esi.RECRUITER_ROLES & set(roles.get("roles", [])))
+        except requests.RequestException:
+            current_app.logger.warning("ESI roles lookup failed for %s", character.character_id, exc_info=True)
+            flash("Couldn't check your corporation roles with EVE, please try again.", "warning")
+            return
+
+    if allowed:
+        character.recruiter_corp_id = corp.corporation_id
+        character.recruiter_verified_at = datetime.now(timezone.utc)
+    else:
+        flash(f"Only directors and recruiters (Personnel Manager role) of {corp.name} can manage its advert.", "warning")
+
+
+def is_recruiter(character: Character | None) -> bool:
+    if character is None or character.recruiter_verified_at is None:
+        return False
+    if character.recruiter_corp_id != character.corporation_id:
+        return False
+    return datetime.now(timezone.utc) - character.recruiter_verified_at < RECRUITER_TTL
+
+
+def csrf_token() -> str:
+    if "csrf" not in session:
+        session["csrf"] = secrets.token_urlsafe(24)
+    return session["csrf"]
+
+
+def check_csrf() -> None:
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        sent = request.form.get("csrf_token", "")
+        expected = session.get("csrf", "")
+        if not expected or not secrets.compare_digest(sent, expected):
+            abort(400, "Invalid or missing form token, please reload the page and try again.")
