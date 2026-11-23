@@ -2,7 +2,7 @@
 name = "evecorps"
 version = "0.1.0"
 description = "eve-corps.online: find and advertise EVE Online corporations"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
     "flask>=3.1",
     "flask-sqlalchemy>=3.1",
@@ -17,6 +17,9 @@ dependencies = [
 
 [tool.uv]
 package = false
+# Shared interpreter that www-data can read (not root's ~/.local/share/uv).
+python-install-dir = "/opt/uv-python"
+python-preference = "only-managed"
 
 [dependency-groups]
 dev = ["pytest>=8.3"]

@@ -25,4 +25,4 @@ the client ID/secret in `.env`.
 ## Deploy
 
 `deploy/evecorps.service` (systemd, gunicorn on 127.0.0.1:8002) and
-`deploy/apache-proxy.conf` (vhost proxy lines).
+`deploy/eve-corps.apache.conf` (copy of the live Apache vhost).
