@@ -278,3 +278,29 @@ def test_favicons_served(client, path, ctype):
 def test_favicon_linked(client):
     html = client.get("/").get_data(as_text=True)
     assert 'rel="icon" href="/favicon.ico"' in html and "favicon.svg" in html
+
+
+def test_convert_paste_endpoint(client, eve):
+    csrf = login(client)
+    resp = client.post("/advert/convert-paste", data={"csrf_token": csrf, "text": "<b>Bold</b><br>next"})
+    assert resp.status_code == 200
+    assert resp.get_json() == {"markdown": "**Bold**\nnext", "format": "eve"}
+    resp = client.post("/advert/convert-paste", data={"csrf_token": csrf, "text": "plain\ntext"})
+    assert resp.get_json() == {"markdown": "plain\ntext", "format": "plain"}
+
+
+def test_convert_paste_limits_and_access(client, eve):
+    csrf = login(client)
+    assert client.post("/advert/convert-paste", data={"text": "x"}).status_code == 400  # no CSRF token
+    resp = client.post("/advert/convert-paste", data={"csrf_token": csrf, "text": "x" * 20_001})
+    assert resp.status_code == 400 and "too long" in resp.get_json()["error"]
+
+    eve["roles"] = []
+    csrf = login(client)
+    assert client.post("/advert/convert-paste", data={"csrf_token": csrf, "text": "x"}).status_code == 403
+
+
+def test_editor_has_paste_panel(client, eve):
+    login(client)
+    html = client.get("/advert").get_data(as_text=True)
+    assert 'id="paste-panel"' in html and "/advert/convert-paste" in html

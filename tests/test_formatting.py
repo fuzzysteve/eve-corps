@@ -152,3 +152,34 @@ def test_converted_output_renders_safely():
 
 def test_empty_description():
     assert convert(None) == "" and convert("") == ""
+
+
+# --- Pasted in-game advert --------------------------------------------------
+
+from evecorps.formatting import pasted_advert_to_markdown as paste  # noqa: E402
+
+
+def test_paste_with_eve_markup_is_converted():
+    md, fmt = paste('<font size="12" color="#bfffffff">Hi <b>pilots</b></font><br>'
+                    '<a href="showinfo:2//1">Our Corp</a> <a href="https://discord.gg/x">Discord</a>')
+    assert fmt == "eve"
+    assert md == "Hi **pilots**\nOur Corp [Discord](<https://discord.gg/x>)"
+
+
+def test_paste_plain_text_kept_as_typed():
+    md, fmt = paste("We fly stuff\r\nEvery day   \r\n\r\n\r\n\r\nJoin us")
+    assert fmt == "plain"
+    assert md == "We fly stuff\nEvery day\n\nJoin us"
+
+
+def test_paste_python_repr_and_empty():
+    assert paste("u'<b>x</b> \\u2022'") == ("**x** •", "eve")
+    assert paste("") == ("", "plain")
+    assert paste(None) == ("", "plain")
+
+
+def test_pasted_html_still_rendered_safely():
+    md, fmt = paste("<script>alert(1)</script><img src=x onerror=alert(1)>")
+    assert fmt == "plain"
+    html = str(render(md))
+    assert "<script" not in html and "<img" not in html

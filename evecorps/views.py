@@ -15,7 +15,7 @@ from sqlalchemy import func, or_, select, update
 from . import choices, esi
 from .auth import is_moderator, is_recruiter, refresh_corporation
 from .extensions import db
-from .formatting import eve_description_to_markdown, render_markdown
+from .formatting import eve_description_to_markdown, pasted_advert_to_markdown, render_markdown
 from .notify import post_report_alert
 from .models import Advert, AdvertRevision, Alliance, Corporation, ModerationLog, Report
 
@@ -415,3 +415,18 @@ def ingame_description():
     except requests.RequestException:
         return jsonify(error="Couldn't reach EVE to fetch your in-game description, try again shortly."), 502
     return jsonify(markdown=eve_description_to_markdown(corp.description))
+
+
+PASTE_MAX = 20_000
+
+
+@bp.route("/advert/convert-paste", methods=["POST"])
+def convert_paste():
+    """Advert text pasted from the game client, converted to Markdown for the editor."""
+    if not is_recruiter(g.character):
+        abort(403)
+    raw = request.form.get("text", "")
+    if len(raw) > PASTE_MAX:
+        return jsonify(error=f"That's too long to convert (over {PASTE_MAX:,} characters)."), 400
+    markdown, fmt = pasted_advert_to_markdown(raw)
+    return jsonify(markdown=markdown, format=fmt)

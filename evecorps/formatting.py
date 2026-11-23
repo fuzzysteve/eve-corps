@@ -191,3 +191,20 @@ def plain_text(source: str | None, limit: int = 200) -> str:
     if len(text) > limit:
         text = text[: limit - 1].rsplit(" ", 1)[0].rstrip(",.;:") + "…"
     return text
+
+
+_EVE_TAG = re.compile(r"<\s*/?\s*(font|br|b|i|u|a|loc|color|url)\b", re.IGNORECASE)
+
+
+def pasted_advert_to_markdown(raw: str | None) -> tuple[str, str]:
+    """Text pasted from the in-game advert editor -> (markdown, detected format).
+
+    The client may put EVE markup or plain text on the clipboard, so handle both:
+    markup goes through the same converter as the in-game description; plain text
+    is kept as typed (line breaks are preserved by the renderer).
+    """
+    text = _unwrap_python_literal((raw or "").replace("\r\n", "\n").replace("\r", "\n"))
+    if _EVE_TAG.search(text):
+        return eve_description_to_markdown(text), "eve"
+    lines = [ln.rstrip() for ln in text.split("\n")]
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip(), "plain"

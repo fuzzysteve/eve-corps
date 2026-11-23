@@ -22,8 +22,23 @@
     <div class="mb-3">
       <div class="d-flex justify-content-between align-items-end mb-1">
         <label class="form-label mb-0" for="body">Description</label>
-        <button type="button" class="btn btn-sm btn-outline-secondary" id="import-ingame"
-                data-url="{{ url_for('main.ingame_description') }}">Import in-game description</button>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="paste-toggle"
+                  aria-expanded="false" aria-controls="paste-panel">Paste in-game advert</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="import-ingame"
+                  data-url="{{ url_for('main.ingame_description') }}">Import in-game description</button>
+        </div>
+      </div>
+      <div class="card card-body bg-body-tertiary mb-2 d-none" id="paste-panel">
+        <label class="form-label small" for="paste-src">
+          In the game, open your advert (Corporation → Recruitment → Our Adverts), select its text, copy it, and paste it here.
+        </label>
+        <textarea class="form-control form-control-sm mb-2" id="paste-src" rows="6" maxlength="20000"></textarea>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-sm btn-primary" id="paste-convert"
+                  data-url="{{ url_for('main.convert_paste') }}">Use this text</button>
+          <button type="button" class="btn btn-sm btn-link" id="paste-cancel">Cancel</button>
+        </div>
       </div>
       <ul class="nav nav-tabs" role="tablist">
         <li class="nav-item"><button type="button" class="nav-link active" id="tab-write">Write</button></li>

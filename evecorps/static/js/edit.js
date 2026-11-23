@@ -60,6 +60,50 @@
     }
   }
 
+  const pasteToggle = document.getElementById("paste-toggle");
+  const pastePanel = document.getElementById("paste-panel");
+  const pasteSrc = document.getElementById("paste-src");
+  const pasteConvert = document.getElementById("paste-convert");
+
+  function togglePaste(open) {
+    pastePanel.classList.toggle("d-none", !open);
+    pasteToggle.setAttribute("aria-expanded", String(open));
+    if (open) pasteSrc.focus();
+  }
+
+  async function convertPaste() {
+    if (!pasteSrc.value.trim()) {
+      status.textContent = "Paste your advert text first.";
+      return;
+    }
+    if (body.value.trim() && !confirm("Replace the current description with the pasted advert?")) return;
+    pasteConvert.disabled = true;
+    status.textContent = "Converting…";
+    try {
+      const resp = await fetch(pasteConvert.dataset.url, {
+        method: "POST",
+        body: new URLSearchParams({ csrf_token: csrf, text: pasteSrc.value }),
+        credentials: "same-origin",
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.error || "Conversion failed, reload the page and try again.");
+      body.value = data.markdown.slice(0, Number(body.maxLength) || 10000);
+      pasteSrc.value = "";
+      togglePaste(false);
+      showWrite();
+      status.textContent = data.format === "eve"
+        ? "Converted from in-game formatting. Colours and sizes aren't kept, and in-game links became plain text. Check it over before saving."
+        : "Pasted as plain text. Tags like timezone and activities don't come across, so tick those below.";
+    } catch (e) {
+      status.textContent = e.message;
+    } finally {
+      pasteConvert.disabled = false;
+    }
+  }
+
+  pasteToggle.addEventListener("click", () => togglePaste(pastePanel.classList.contains("d-none")));
+  document.getElementById("paste-cancel").addEventListener("click", () => togglePaste(false));
+  pasteConvert.addEventListener("click", convertPaste);
   tabWrite.addEventListener("click", showWrite);
   tabPreview.addEventListener("click", showPreview);
   importBtn.addEventListener("click", importIngame);
