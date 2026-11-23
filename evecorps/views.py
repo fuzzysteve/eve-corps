@@ -2,7 +2,10 @@ import math
 from decimal import Decimal, InvalidOperation
 
 import requests
-from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
+from flask import (
+    Blueprint, abort, current_app, flash, g, jsonify, redirect, render_template, request,
+    send_from_directory, url_for,
+)
 from sqlalchemy import select
 
 from . import choices
@@ -22,6 +25,14 @@ SP_MAX = 1_000_000_000
 @bp.route("/")
 def index():
     return render_template("index.html")
+
+
+# Browsers and crawlers ask for these at the site root regardless of <link> tags.
+@bp.route("/favicon.ico")
+@bp.route("/apple-touch-icon.png")
+def root_icon():
+    name = request.path.lstrip("/")
+    return send_from_directory(current_app.static_folder, name, max_age=7 * 86400)
 
 
 def _selected(source, name: str) -> list[str]:

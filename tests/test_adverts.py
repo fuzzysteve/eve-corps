@@ -262,3 +262,19 @@ def test_security_headers(client):
     assert "default-src 'self'" in csp and "object-src 'none'" in csp and "frame-ancestors 'none'" in csp
     assert "script-src 'self' https://cdn.jsdelivr.net" in csp and "'unsafe-inline'" not in csp
     assert resp.headers["X-Content-Type-Options"] == "nosniff"
+
+
+@pytest.mark.parametrize("path,ctype", [
+    ("/favicon.ico", "image/vnd.microsoft.icon"),
+    ("/apple-touch-icon.png", "image/png"),
+    ("/static/favicon.svg", "image/svg+xml"),
+])
+def test_favicons_served(client, path, ctype):
+    resp = client.get(path)
+    assert resp.status_code == 200 and resp.content_type.startswith(ctype)
+    resp.close()
+
+
+def test_favicon_linked(client):
+    html = client.get("/").get_data(as_text=True)
+    assert 'rel="icon" href="/favicon.ico"' in html and "favicon.svg" in html
