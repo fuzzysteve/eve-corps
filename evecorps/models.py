@@ -1,9 +1,9 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
-    BigInteger, Boolean, Computed, DateTime, Float, ForeignKey, Index, Integer, String, Text, Uuid,
-    false, func, text, true,
+    BigInteger, Boolean, Computed, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text,
+    Uuid, false, func, text, true,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, foreign, mapped_column, relationship
@@ -214,3 +214,23 @@ class AdvertRevision(db.Model):
 
     advert: Mapped[Advert] = relationship(back_populates="revisions")
     editor: Mapped[Character] = relationship()
+
+
+class AdvertViewDaily(db.Model):
+    """Page views per advert per day. Counts only: no IPs, cookies or visitor data."""
+
+    __tablename__ = "advert_view_daily"
+
+    advert_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("advert.id", ondelete="CASCADE"), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    views: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class RateLimit(db.Model):
+    """Fixed-window counters: key (e.g. "report:<character_id>") per window start."""
+
+    __tablename__ = "rate_limit"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, default=0)

@@ -1,0 +1,15 @@
+[Unit]
+Description=eve-corps.online: refresh corp facts from ESI and prune old counters
+After=network-online.target postgresql.service
+Wants=network-online.target
+OnFailure=discord-notify@%n.service
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/home/web/corps
+Environment=FLASK_APP=wsgi.py
+ExecStart=/home/web/corps/.venv/bin/flask refresh-corps
+ExecStart=/home/web/corps/.venv/bin/flask prune
+TimeoutStartSec=30min

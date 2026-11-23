@@ -1,0 +1,10 @@
+[Unit]
+Description=Run evecorps-maintenance every 6 hours
+
+[Timer]
+OnCalendar=*-*-* 00/6:17:00
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

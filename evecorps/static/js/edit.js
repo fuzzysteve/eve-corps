@@ -30,6 +30,10 @@
         body: new URLSearchParams({ csrf_token: csrf, body: body.value }),
         credentials: "same-origin",
       });
+      if (resp.status === 429) {
+        preview.textContent = await resp.text();
+        return;
+      }
       if (!resp.ok) throw new Error(resp.status);
       // Server output is rendered and sanitized (nh3) before it gets here.
       preview.innerHTML = await resp.text();

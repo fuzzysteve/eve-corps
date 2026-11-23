@@ -8,6 +8,7 @@
 {%- endmacro %}
 <div class="card card-body">
   <h1 class="h4">{{ 'Edit' if advert else 'Create' }} advert for {{ corp.name }} [{{ corp.ticker }}]</h1>
+  {% if stats %}<p class="text-body-secondary small">Your advert was viewed {{ stats.week }} time{{ 's' if stats.week != 1 }} in the last 7 days and {{ stats.month }} in the last 30.</p>{% endif %}
   {% if advert and advert.moderation_hidden %}
     <div class="alert alert-warning"><strong>Hidden by moderators.</strong> Reason: {{ advert.moderation_reason }}<br>
     You can still edit it; it stays hidden until a moderator reviews it again.</div>

@@ -1,0 +1,9 @@
+[Unit]
+Description=eve-corps.online: nightly PostgreSQL dump
+After=postgresql.service
+OnFailure=discord-notify@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/web/corps/deploy/backup-db.sh
+TimeoutStartSec=30min

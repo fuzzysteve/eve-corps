@@ -40,6 +40,11 @@ def create_app(config: type[Config] | Config = Config) -> Flask:
     app.jinja_env.filters["age"] = corp_age
     app.after_request(security_headers)
 
+    from .cli import prune, refresh_corps
+
+    app.cli.add_command(refresh_corps)
+    app.cli.add_command(prune)
+
     return app
 
 

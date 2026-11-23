@@ -11,13 +11,15 @@ from flask import (
     send_from_directory, url_for,
 )
 from sqlalchemy import func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from . import choices, esi
 from .auth import is_moderator, is_recruiter, refresh_corporation
 from .extensions import db
+from . import limits
 from .formatting import eve_description_to_markdown, pasted_advert_to_markdown, render_markdown
 from .notify import post_report_alert
-from .models import Advert, AdvertRevision, Alliance, Corporation, ModerationLog, Report
+from .models import Advert, AdvertRevision, AdvertViewDaily, Alliance, Corporation, ModerationLog, Report
 
 bp = Blueprint("main", __name__)
 
@@ -32,6 +34,35 @@ DISCORD_INVITE = re.compile(r"^https://(?:www\.)?(?:discord\.gg|discord\.com/inv
 @bp.route("/")
 def index():
     return render_template("index.html")
+
+
+@bp.route("/robots.txt")
+def robots():
+    lines = [
+        "User-agent: *",
+        "Disallow: /advert",
+        "Disallow: /moderation/",
+        "Disallow: /sso/",
+        "Disallow: /logout",
+        "Disallow: /corps/*/history",
+        "Disallow: /corps?",  # filtered/search listings: endless combinations
+        f"Sitemap: {url_for('main.sitemap', _external=True)}",
+        "",
+    ]
+    return "\n".join(lines), 200, {"Content-Type": "text/plain; charset=utf-8"}
+
+
+@bp.route("/sitemap.xml")
+def sitemap():
+    adverts = db.session.scalars(
+        select(Advert)
+        .join(Advert.corporation)
+        .where(Advert.active.is_(True), Advert.moderation_hidden.is_(False),
+               or_(Corporation.state.is_(None), Corporation.state != "closed"))
+        .order_by(Advert.last_confirmed_at.desc())
+    ).all()
+    xml = render_template("sitemap.xml", adverts=adverts)
+    return xml, 200, {"Content-Type": "application/xml; charset=utf-8"}
 
 
 # Browsers and crawlers ask for these at the site root regardless of <link> tags.
@@ -235,10 +266,50 @@ def corp(corporation_id: int):
     already_reported = g.character is not None and any(
         r.reporter_id == g.character.character_id and r.resolved_at is None for r in advert.reports
     )
+    if advert.public and not (can_edit or moderator):
+        _count_view(advert)
+    stats = view_stats(advert) if (can_edit or moderator) else None
     return render_template(
         "corp.html", advert=advert, can_edit=can_edit, moderator=moderator,
-        already_reported=already_reported,
+        already_reported=already_reported, stats=stats,
     )
+
+
+# Crawlers, link-preview fetchers and scripts don't count as views.
+BOT_UA = re.compile(
+    r"bot|crawl|spider|slurp|preview|facebookexternalhit|embedly|discord|telegram|whatsapp|"
+    r"slack|skype|curl|wget|python|httpx|go-http|java/|headless|lighthouse|monitor",
+    re.IGNORECASE,
+)
+
+
+def _count_view(advert: Advert) -> None:
+    """Add one to today's count. Stores no IP, cookie or anything about the visitor."""
+    ua = request.headers.get("User-Agent", "")
+    if request.method != "GET" or not ua or BOT_UA.search(ua):  # real browsers always send a UA
+        return
+    today = datetime.now(timezone.utc).date()
+    db.session.execute(
+        pg_insert(AdvertViewDaily)
+        .values(advert_id=advert.id, day=today, views=1)
+        .on_conflict_do_update(
+            index_elements=[AdvertViewDaily.advert_id, AdvertViewDaily.day],
+            set_={"views": AdvertViewDaily.views + 1},
+        )
+    )
+    db.session.commit()
+
+
+def view_stats(advert: Advert) -> dict:
+    today = datetime.now(timezone.utc).date()
+
+    def since(days: int) -> int:
+        return db.session.scalar(
+            select(func.coalesce(func.sum(AdvertViewDaily.views), 0))
+            .where(AdvertViewDaily.advert_id == advert.id, AdvertViewDaily.day > today - timedelta(days=days))
+        )
+
+    return {"week": since(7), "month": since(30)}
 
 
 def _display(field: str, value) -> str:
@@ -312,6 +383,9 @@ def report(corporation_id: int):
     if not reason or len(reason) > 1000:
         flash("Please say briefly what's wrong (up to 1000 characters).", "warning")
         return redirect(url_for("main.corp", corporation_id=corporation_id))
+    if not limits.allow("report", g.character.character_id):
+        flash("You've sent a lot of reports recently. Please try again later.", "warning")
+        return redirect(url_for("main.corp", corporation_id=corporation_id))
     open_report = any(
         r.reporter_id == g.character.character_id and r.resolved_at is None for r in advert.reports
     )
@@ -367,7 +441,8 @@ def edit_advert():
     advert = db.session.scalar(select(Advert).where(Advert.corporation_id == corp.corporation_id))
 
     if request.method == "GET":
-        return render_template("edit.html", advert=advert, form=None, errors=[])
+        stats = view_stats(advert) if advert else None
+        return render_template("edit.html", advert=advert, form=None, errors=[], stats=stats)
 
     form = request.form
     errors = []
@@ -452,6 +527,8 @@ def edit_advert():
 def preview_advert():
     if not is_recruiter(g.character):
         abort(403)
+    if not limits.allow("preview", g.character.character_id):
+        return "Too many previews. Wait a few minutes and try again.", 429, {"Content-Type": "text/plain; charset=utf-8"}
     body = request.form.get("body", "")[:BODY_MAX]
     return render_markdown(body), 200, {"Content-Type": "text/html; charset=utf-8"}
 
@@ -461,6 +538,8 @@ def ingame_description():
     """The corp's in-game description converted to Markdown, for the editor."""
     if not is_recruiter(g.character):
         abort(403)
+    if not limits.allow("import", g.character.character_id):
+        return jsonify(error="Too many imports. Wait a few minutes and try again."), 429
     try:
         # Only re-fetched from ESI once the cached copy has expired.
         corp = refresh_corporation(g.character.corporation_id)
@@ -478,6 +557,8 @@ def convert_paste():
     """Advert text pasted from the game client, converted to Markdown for the editor."""
     if not is_recruiter(g.character):
         abort(403)
+    if not limits.allow("convert", g.character.character_id):
+        return jsonify(error="Too many conversions. Wait a few minutes and try again."), 429
     raw = request.form.get("text", "")
     if len(raw) > PASTE_MAX:
         return jsonify(error=f"That's too long to convert (over {PASTE_MAX:,} characters)."), 400

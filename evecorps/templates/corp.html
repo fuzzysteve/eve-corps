@@ -48,6 +48,7 @@
         <p class="text-body-secondary small mt-3 mb-0"
            title="Updated whenever one of the corporation's recruiters edits the advert or logs in to this site.">
           Last updated {{ advert.last_confirmed_at.strftime('%Y-%m-%d') }}
+          {% if stats %}<span title="Page views by visitors, not counting this corp's recruiters, moderators or bots."> · Views: {{ stats.week }} in the last 7 days, {{ stats.month }} in the last 30</span>{% endif %}
         </p>
         {% if can_edit or moderator %}
         <div class="d-flex gap-2 mt-3">

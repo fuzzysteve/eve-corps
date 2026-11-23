@@ -9,6 +9,9 @@ eve-corps.online: Flask + PostgreSQL directory of recruiting EVE Online corporat
     FLASK_APP=wsgi.py .venv/bin/flask db upgrade       # applies to the LIVE database in .env
     systemctl restart evecorps                         # deploy code/template changes
     journalctl -u evecorps                             # app logs
+    FLASK_APP=wsgi.py .venv/bin/flask refresh-corps    # what evecorps-maintenance.timer runs (6-hourly)
+    FLASK_APP=wsgi.py .venv/bin/flask prune
+    systemctl start evecorps-backup                    # nightly pg_dump to /home/web/backups/evecorps-db/
 
 uv manages dependencies. Python 3.14 is installed in `/opt/uv-python` (pinned in `pyproject.toml`), because www-data can't read uv's default location under `/root`. Don't recreate `.venv` with another interpreter.
 
@@ -23,6 +26,7 @@ uv manages dependencies. Python 3.14 is installed in `/opt/uv-python` (pinned in
 - `moderation.py`: moderation blueprint. `notify.py`: Discord report alert.
 - `formatting.py`: Markdown rendering and sanitizing, EVE-markup to Markdown, plain-text excerpts.
 - `choices.py`: fixed option lists (tags, FW factions, size/tax/age buckets, commitment).
+- `limits.py`: Postgres fixed-window rate limits (`limits.allow(action, who)`). `cli.py`: `refresh-corps` and `prune`.
 - `deploy/`: systemd unit and a copy of the live Apache vhost. Keep the copy in sync with `/etc/apache2/sites-available/eve-corps.conf`.
 
 ## Rules
@@ -58,4 +62,5 @@ uv manages dependencies. Python 3.14 is installed in `/opt/uv-python` (pinned in
 - The old PHP site is archived in `/home/web/archive/corps-php/`.
 - Snap Chromium (`/snap/bin/chromium`) can't read or write `/tmp`. For screenshots or browser checks, drive it over the DevTools protocol (`--remote-debugging-port`) and use `Page.captureScreenshot`.
 - Stop temporary servers by port (`ss -ltnp`), not `pkill -f <name>`, which can match and kill the calling shell.
+- systemd units in `deploy/` are copies: after changing one, copy it to `/etc/systemd/system/` and run `systemctl daemon-reload`.
 - Report alerts use the shared "Error Reports" webhook (`/opt/pricegetter-redis/discord-webhook.txt`). Never post to it from tests.

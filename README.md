@@ -27,6 +27,10 @@ Live at <https://eve-corps.online>. Flask, PostgreSQL, SQLAlchemy 2, Alembic.
 - Advert Markdown is rendered with raw HTML off and images disabled, then filtered by `nh3` (tag allowlist, absolute http/https/mailto links only).
 - A strict Content-Security-Policy: no inline scripts, and only the exact Bootstrap files from the CDN.
 - CSRF tokens on every form, trusted hosts, and a regression suite of XSS payloads in `tests/test_xss.py`.
+- Rate limits per character on reports, previews and imports (stored in Postgres, so they hold across workers).
+
+**Recruiter stats**
+- Daily page-view counts per advert, shown only to that corp's recruiters and to moderators. Bots, link-preview fetchers and the corp's own recruiters aren't counted, and no IPs or cookies are stored.
 
 ## Setup
 
@@ -70,6 +74,10 @@ Schema changes:
 
 - `deploy/evecorps.service`: systemd unit, gunicorn on `127.0.0.1:8002`, running as `www-data`.
 - `deploy/eve-corps.apache.conf`: Apache vhost. It terminates TLS, serves `/static/` directly, serves `/.well-known/` from `htdocs/` for ACME, and proxies everything else.
+- `deploy/evecorps-maintenance.{service,timer}`: every 6 hours, `flask refresh-corps` re-fetches ESI facts for corps with adverts (only after ESI's `Expires`; stops on a 420/429), then `flask prune` clears old rate-limit counters and year-old view counts.
+- `deploy/evecorps-backup.{service,timer}` and `deploy/backup-db.sh`: a nightly `pg_dump` at 03:30, checked with `pg_restore --list` and kept for 14 days in `/home/web/backups/evecorps-db/`. Restore with `pg_restore --clean --if-exists -d evecorps <file>`. The dumps are on the same disk as the database, so they don't count as an off-site backup.
+
+Both timers alert through `discord-notify@` if a run fails.
 
 ## License
 

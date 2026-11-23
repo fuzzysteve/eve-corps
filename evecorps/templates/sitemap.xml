@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>{{ url_for('main.index', _external=True) }}</loc></url>
+  <url><loc>{{ url_for('main.browse', _external=True) }}</loc>{% if adverts %}<lastmod>{{ adverts[0].last_confirmed_at.strftime('%Y-%m-%d') }}</lastmod>{% endif %}</url>
+{%- for advert in adverts %}
+  <url><loc>{{ url_for('main.corp', corporation_id=advert.corporation_id, _external=True) }}</loc><lastmod>{{ advert.last_confirmed_at.strftime('%Y-%m-%d') }}</lastmod></url>
+{%- endfor %}
+</urlset>
