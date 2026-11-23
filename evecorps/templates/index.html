@@ -1,11 +1,33 @@
 {% extends "base.html" %}
 {% block maincontent %}
 <div class="boxout p-4 rounded">
-  <p>Eve-Corps.online is an out of game way to look for, and to advertise Corporations in Eve Online. It's currently under development, but functionality should be along shortly.</p>
-  <p>Filter on a variety of different attributes, in different combinations.</p>
-  <div class="d-flex justify-content-evenly mt-4">
-    <a class="btn btn-primary" href="{{ url_for('main.browse') }}">Find a Corp</a>
-    <a class="btn btn-primary" href="{{ url_for('main.edit_advert') }}">Put up a Corp Advert</a>
+  <h1 class="h3">Find your next corporation, or your next recruits</h1>
+  <p class="lead mb-4">Eve-Corps.online is an out-of-game directory of EVE Online corporations that are recruiting. Browse, filter and get in touch, without having to log in first.</p>
+
+  <div class="row g-4">
+    <section class="col-md-6">
+      <h2 class="h5">Looking for a corp?</h2>
+      <ul class="mb-3">
+        <li>Filter by timezone, language, activities and where they live, from high-sec to wormhole space.</li>
+        <li>Narrow it down to new-player friendly corps, ship replacement (SRP), alliance or independent, and skill point requirements that fit you.</li>
+        <li>Search corp and alliance names, tickers and advert text.</li>
+        <li>Check a corp out before you apply, with links to zKillboard, EveWho and DOTLAN, then join their Discord or in-game channel, or contact a recruiter directly.</li>
+      </ul>
+      <a class="btn btn-primary" href="{{ url_for('main.browse') }}">Find a Corp</a>
+    </section>
+
+    <section class="col-md-6">
+      <h2 class="h5">Recruiting?</h2>
+      <ul class="mb-3">
+        <li>Log in with EVE Online. CEOs, directors and members with the Personnel Manager role can manage their corporation's advert.</li>
+        <li>Write it in Markdown, or start from your in-game corporation description or a pasted in-game advert.</li>
+        <li>Add your Discord, website, recruitment channel and recruiters, so pilots know exactly where to go.</li>
+        <li>Whenever one of your recruiters logs in or edits the advert, it shows as recently updated, so pilots can see you're still active.</li>
+      </ul>
+      <a class="btn btn-primary" href="{{ url_for('main.edit_advert') }}">Put up a Corp Advert</a>
+    </section>
   </div>
+
+  <p class="small mb-0 mt-4">It's free to use. We only ask EVE for your corporation roles, never your wallet, assets or mail, and we don't keep your login token.</p>
 </div>
 {% endblock %}
